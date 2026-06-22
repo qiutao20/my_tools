@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>韬表的小工具导航</title>
+  <style>
+    :root {
+      --bg: #F0EEE6;
+      --surface: #FAF9F5;
+      --ink: #1A1A18;
+      --ink-soft: #6B665C;
+      --line: #E2DFD4;
+      --accent: #CC785C;
+      --accent-soft: #E8D5CC;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1F1E1B;
+        --surface: #292824;
+        --ink: #F0EEE6;
+        --ink-soft: #A8A296;
+        --line: #3A382F;
+        --accent: #E0998A;
+        --accent-soft: #4A3A33;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 80px 24px 64px;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+                   "PingFang SC", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    header {
+      margin-bottom: 56px;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      font-size: 13px;
+      letter-spacing: 0;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-weight: 500;
+      font-size: clamp(34px, 6vw, 52px);
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    header p {
+      margin: 18px 0 0;
+      max-width: 46ch;
+      color: var(--ink-soft);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    .list {
+      border-top: 1px solid var(--line);
+    }
+
+    a.row {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      padding: 26px 8px;
+      border-bottom: 1px solid var(--line);
+      text-decoration: none;
+      color: var(--ink);
+      transition: padding-left 0.3s ease, background 0.3s ease;
+    }
+
+    .list.is-reordering a.row,
+    a.row:hover {
+      padding-left: 20px;
+      background: var(--surface);
+    }
+
+    .icon {
+      flex: 0 0 auto;
+      width: 46px;
+      height: 46px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-size: 22px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      transition: transform 0.3s ease;
+    }
+
+    a.row:hover .icon { transform: translateY(-2px); }
+
+    .meta { flex: 1 1 auto; }
+
+    .name {
+      display: block;
+      font-size: 19px;
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+
+    .desc {
+      display: block;
+      margin-top: 4px;
+      font-size: 14.5px;
+      color: var(--ink-soft);
+    }
+
+    .arrow {
+      flex: 0 0 auto;
+      color: var(--ink-soft);
+      font-size: 20px;
+      opacity: 0;
+      transform: translateX(-6px);
+      transition: opacity 0.3s ease, transform 0.3s ease, color 0.3s ease;
+    }
+
+    a.row:hover .arrow {
+      opacity: 1;
+      transform: translateX(0);
+      color: var(--accent);
+    }
+
+    .handle {
+      flex: 0 0 auto;
+      width: 32px;
+      height: 46px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: var(--ink-soft);
+      cursor: grab;
+      font-size: 20px;
+      opacity: 0.46;
+      touch-action: none;
+      user-select: none;
+      transition: opacity 0.2s ease, color 0.2s ease, background 0.2s ease;
+    }
+
+    .handle:hover {
+      background: var(--accent-soft);
+      color: var(--accent);
+      opacity: 1;
+    }
+
+    .handle:active,
+    a.row.dragging .handle {
+      cursor: grabbing;
+    }
+
+    a.row.dragging {
+      opacity: 0.48;
+    }
+
+    footer {
+      margin-top: 56px;
+      color: var(--ink-soft);
+      font-size: 13.5px;
+      letter-spacing: 0;
+    }
+
+    @media (max-width: 560px) {
+      body {
+        padding: 56px 18px 48px;
+      }
+
+      header {
+        margin-bottom: 42px;
+      }
+
+      a.row {
+        gap: 16px;
+        padding: 22px 4px;
+      }
+
+      a.row:hover {
+        padding-left: 10px;
+      }
+
+      .icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 9px;
+        font-size: 20px;
+      }
+
+      .handle {
+        width: 28px;
+        height: 42px;
+        font-size: 18px;
+      }
+
+      .name {
+        font-size: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <span class="eyebrow">Taobiao · Toolbox</span>
+      <h1>韬表的小工具导航</h1>
+      <p>Have fun！</p>
+    </header>
+
+    <nav class="list" aria-label="小工具导航" data-sortable-list>
+      <a class="row" href="./daily_program/" data-id="plan">
+        <span class="icon" aria-hidden="true">🗓️</span>
+        <span class="meta">
+          <span class="name">Plan</span>
+          <span class="desc">每周计划</span>
+        </span>
+        <span class="arrow" aria-hidden="true">→</span>
+      </a>
+
+      <a class="row" href="https://ha.qiutao20.online" data-id="home-assistant">
+        <span class="icon" aria-hidden="true">🏠</span>
+        <span class="meta">
+          <span class="name">Home Assistant</span>
+          <span class="desc">宿舍控制中心</span>
+        </span>
+        <span class="arrow" aria-hidden="true">→</span>
+      </a>
+
+      <a class="row" href="https://qiutao20.github.io/nudt_bus_for_CSE/" data-id="bus-public">
+        <span class="icon" aria-hidden="true">🚍</span>
+        <span class="meta">
+          <span class="name">Bus-public</span>
+          <span class="desc">班车查询</span>
+        </span>
+        <span class="arrow" aria-hidden="true">→</span>
+      </a>
+
+      <a class="row" href="https://bus.qiutao20.online" data-id="bus-private">
+        <span class="icon" aria-hidden="true">🚌</span>
+        <span class="meta">
+          <span class="name">Bus-private</span>
+          <span class="desc">班车查询</span>
+        </span>
+        <span class="arrow" aria-hidden="true">→</span>
+      </a>
+
+      <a class="row" href="https://bus.qiutao20.online/docs/device-admin" data-id="token-admin">
+        <span class="icon" aria-hidden="true">🔐</span>
+        <span class="meta">
+          <span class="name">Token Admin</span>
+          <span class="desc">设备 Token 管理页</span>
+        </span>
+        <span class="arrow" aria-hidden="true">→</span>
+      </a>
+
+      <a class="row" href="https://mobilevc.qiutao20.online" data-id="mobile-vc">
+        <span class="icon" aria-hidden="true">💻</span>
+        <span class="meta">
+          <span class="name">Mobile VC</span>
+          <span class="desc">移动端远程开发助手</span>
+        </span>
+        <span class="arrow" aria-hidden="true">→</span>
+      </a>
+
+      <a class="row" href="https://huggingface.co/spaces/taobiao/weread" data-id="weread">
+        <span class="icon" aria-hidden="true">📖</span>
+        <span class="meta">
+          <span class="name">WeRead</span>
+          <span class="desc">微信读书工具 · Hugging Face</span>
+        </span>
+        <span class="arrow" aria-hidden="true">→</span>
+      </a>
+
+      <a class="row" href="./revise_tool/" data-id="revise">
+        <span class="icon" aria-hidden="true">📋</span>
+        <span class="meta">
+          <span class="name">Revise</span>
+          <span class="desc">返修进度控制小工具</span>
+        </span>
+        <span class="arrow" aria-hidden="true">→</span>
+      </a>
+    </nav>
+
+    <footer>© 2026 qiutao20@github.com / qiutao20@nudt.edu.cn</footer>
+  </div>
+  <script>
+    (() => {
+      const storageKey = "qiutao20.toolbox.order.v1";
+      const legacyDefaultOrder = [
+        "home-assistant",
+        "mobile-vc",
+        "revise",
+        "plan",
+        "bus-public",
+        "weread",
+        "bus-private",
+        "token-admin",
+      ];
+      const list = document.querySelector("[data-sortable-list]");
+      if (!list) return;
+
+      const getRows = () => Array.from(list.querySelectorAll(".row[data-id]"));
+      const ordersMatch = (left, right) => left.length === right.length && left.every((id, index) => id === right[index]);
+
+      const readOrder = () => {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(storageKey) || "[]");
+          if (!Array.isArray(parsed)) return [];
+
+          return ordersMatch(parsed, legacyDefaultOrder) ? [] : parsed;
+        } catch {
+          return [];
+        }
+      };
+
+      const saveOrder = () => {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(getRows().map((row) => row.dataset.id)));
+        } catch {
+          // Sorting should still work even when localStorage is unavailable.
+        }
+      };
+
+      const applySavedOrder = () => {
+        const savedOrder = readOrder();
+        if (!savedOrder.length) return;
+
+        const rowsById = new Map(getRows().map((row) => [row.dataset.id, row]));
+        const orderedRows = savedOrder.map((id) => rowsById.get(id)).filter(Boolean);
+        const newRows = getRows().filter((row) => !savedOrder.includes(row.dataset.id));
+
+        [...orderedRows, ...newRows].forEach((row) => list.appendChild(row));
+      };
+
+      const getInsertTarget = (pointerY, draggedRow) => {
+        const rows = getRows().filter((row) => row !== draggedRow);
+
+        return rows.reduce((closest, row) => {
+          const box = row.getBoundingClientRect();
+          const offset = pointerY - box.top - box.height / 2;
+
+          if (offset < 0 && offset > closest.offset) {
+            return { offset, row };
+          }
+
+          return closest;
+        }, { offset: Number.NEGATIVE_INFINITY, row: null }).row;
+      };
+
+      applySavedOrder();
+
+      getRows().forEach((row) => {
+        const handle = document.createElement("span");
+        handle.className = "handle";
+        handle.textContent = "⋮⋮";
+        handle.title = "拖动排序";
+        handle.setAttribute("aria-hidden", "true");
+        row.appendChild(handle);
+      });
+
+      let draggedRow = null;
+      let activeHandle = null;
+      let startY = 0;
+      let hasMoved = false;
+
+      const finishDrag = (event) => {
+        if (!draggedRow) return;
+
+        if (activeHandle?.hasPointerCapture?.(event.pointerId)) {
+          activeHandle.releasePointerCapture(event.pointerId);
+        }
+
+        draggedRow.classList.remove("dragging");
+        list.classList.remove("is-reordering");
+        saveOrder();
+
+        const moved = hasMoved;
+        draggedRow = null;
+        activeHandle = null;
+        hasMoved = false;
+
+        if (moved) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      };
+
+      list.addEventListener("pointerdown", (event) => {
+        const handle = event.target.closest(".handle");
+        if (!handle || !list.contains(handle) || (event.button !== undefined && event.button !== 0)) return;
+
+        draggedRow = handle.closest(".row");
+        activeHandle = handle;
+        startY = event.clientY;
+        hasMoved = false;
+
+        activeHandle.setPointerCapture?.(event.pointerId);
+        draggedRow.classList.add("dragging");
+        list.classList.add("is-reordering");
+
+        event.preventDefault();
+        event.stopPropagation();
+      });
+
+      list.addEventListener("pointermove", (event) => {
+        if (!draggedRow) return;
+
+        if (Math.abs(event.clientY - startY) > 3) {
+          hasMoved = true;
+        }
+
+        const insertTarget = getInsertTarget(event.clientY, draggedRow);
+        if (insertTarget) {
+          list.insertBefore(draggedRow, insertTarget);
+        } else {
+          list.appendChild(draggedRow);
+        }
+
+        event.preventDefault();
+      });
+
+      list.addEventListener("pointerup", finishDrag);
+      list.addEventListener("pointercancel", finishDrag);
+
+      list.addEventListener("click", (event) => {
+        if (!event.target.closest(".handle")) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }, true);
+    })();
+  </script>
+</body>
+</html>

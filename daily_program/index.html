@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>每周计划</title>
+    <link rel="stylesheet" href="styles.css?v=20260622-1" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M7 3v3M17 3v3M4 9h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" />
+              <path d="m8 14 2 2 5-5" />
+            </svg>
+          </div>
+          <div>
+            <h1>每周计划</h1>
+            <p id="weekRange">本周</p>
+          </div>
+        </div>
+
+        <nav class="week-nav" aria-label="周切换">
+          <button class="icon-button" id="prevWeek" type="button" aria-label="上一周" title="上一周">
+            <svg viewBox="0 0 24 24" focusable="false"><path d="m15 18-6-6 6-6" /></svg>
+          </button>
+          <button class="today-button" id="currentWeek" type="button">回到本周</button>
+          <button class="icon-button" id="nextWeek" type="button" aria-label="下一周" title="下一周">
+            <svg viewBox="0 0 24 24" focusable="false"><path d="m9 18 6-6-6-6" /></svg>
+          </button>
+        </nav>
+
+        <details id="focusPanel" class="panel compact-panel" aria-labelledby="focusTitle" open>
+          <summary class="mobile-panel-summary">本周焦点</summary>
+          <div class="panel-heading">
+            <h2 id="focusTitle">本周焦点</h2>
+            <button class="icon-button subtle" id="clearWeek" type="button" aria-label="清空本周" title="清空本周">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M3 6h18" />
+                <path d="M8 6V4h8v2" />
+                <path d="m19 6-.7 13.2A2 2 0 0 1 16.3 21H7.7a2 2 0 0 1-2-1.8L5 6" />
+                <path d="M10 11v6M14 11v6" />
+              </svg>
+            </button>
+          </div>
+          <textarea id="weeklyFocus" rows="6" placeholder="这一周最重要的方向、限制或提醒"></textarea>
+        </details>
+
+        <details id="quickPanel" class="sidebar-quick" aria-label="快速记录" open>
+          <summary class="mobile-quick-summary">
+            <span>快速记录</span>
+            <span>想法 / 计划</span>
+          </summary>
+          <form id="ideaForm" class="quick-form">
+            <label for="ideaInput">想法</label>
+            <div class="input-row">
+              <input id="ideaInput" type="text" maxlength="120" placeholder="先放进来，稍后整理" autocomplete="off" />
+              <button class="icon-button filled" type="submit" aria-label="记录想法" title="记录想法">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M5 12h14" />
+                  <path d="M12 5v14" />
+                </svg>
+              </button>
+            </div>
+          </form>
+
+          <form id="taskForm" class="quick-form">
+            <label for="taskInput">计划</label>
+            <div class="input-row task-row">
+              <input id="taskInput" type="text" maxlength="140" placeholder="写下要推进的一件事" autocomplete="off" />
+              <select id="taskDay" aria-label="选择日期"></select>
+              <select id="taskPriority" aria-label="选择优先级">
+                <option value="normal">普通</option>
+                <option value="high">重要</option>
+                <option value="low">稍后</option>
+              </select>
+              <button class="icon-button filled" type="submit" aria-label="添加计划" title="添加计划">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M5 12h14" />
+                  <path d="M12 5v14" />
+                </svg>
+              </button>
+            </div>
+          </form>
+        </details>
+
+        <section class="panel stats-panel" aria-label="周统计">
+          <div>
+            <span id="doneCount">0</span>
+            <p id="doneLabel">已完成</p>
+          </div>
+          <div>
+            <span id="openCount">0</span>
+            <p id="openLabel">进行中</p>
+          </div>
+          <div>
+            <span id="ideaCount">0</span>
+            <p id="ideaLabel">想法</p>
+          </div>
+        </section>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">计划台</p>
+            <h2 id="activeDateLabel">本周</h2>
+          </div>
+          <div class="actions">
+            <button class="ghost-button" id="exportData" type="button">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <path d="m7 10 5 5 5-5" />
+                <path d="M12 15V3" />
+              </svg>
+              导出
+            </button>
+            <button class="primary-button" id="quickAddTask" type="button">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              添加计划
+            </button>
+          </div>
+        </header>
+
+        <nav class="page-tabs" role="tablist" aria-label="页面切换">
+          <button class="page-tab active" id="plannerPageBtn" type="button" role="tab" aria-controls="plannerView" aria-selected="true">
+            日常版
+          </button>
+          <button class="page-tab" id="holidayPageBtn" type="button" role="tab" aria-controls="holidayView" aria-selected="false">
+            假期版
+          </button>
+          <button class="page-tab" id="periodPageBtn" type="button" role="tab" aria-controls="periodView" aria-selected="false">
+            宏观版
+          </button>
+          <button class="page-tab" id="inboxPageBtn" type="button" role="tab" aria-controls="inboxView" aria-selected="false">
+            汇总
+          </button>
+          <button class="page-tab" id="syncPageBtn" type="button" role="tab" aria-controls="syncView" aria-selected="false">
+            数据同步
+          </button>
+        </nav>
+
+        <section class="app-view active" id="plannerView" role="tabpanel" aria-labelledby="plannerPageBtn">
+          <section class="workspace">
+            <section class="board-section" aria-labelledby="boardTitle">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">一周节奏</p>
+                  <h2 id="boardTitle">每日计划</h2>
+                </div>
+                <div class="view-switch" role="tablist" aria-label="视图切换">
+                  <button class="segmented active" id="allView" type="button" role="tab" aria-selected="true">全部</button>
+                  <button class="segmented" id="openView" type="button" role="tab" aria-selected="false">未完成</button>
+                </div>
+              </div>
+              <div class="day-grid" id="dayGrid"></div>
+            </section>
+
+            <aside class="right-rail">
+              <section class="panel idea-panel" aria-labelledby="ideaTitle">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">收集箱</p>
+                    <h2 id="ideaTitle">想法</h2>
+                  </div>
+                  <button class="icon-button subtle" id="clearDoneIdeas" type="button" aria-label="清除已整理想法" title="清除已整理想法">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M3 6h18" />
+                      <path d="M8 6V4h8v2" />
+                      <path d="m19 6-.7 13.2A2 2 0 0 1 16.3 21H7.7a2 2 0 0 1-2-1.8L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="idea-list" id="ideaList"></div>
+              </section>
+
+              <section class="panel review-panel" aria-labelledby="reviewTitle">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">周末复盘</p>
+                    <h2 id="reviewTitle">留下结论</h2>
+                  </div>
+                </div>
+                <textarea id="weeklyReview" rows="8" placeholder="哪些有效，哪些下周调整"></textarea>
+              </section>
+            </aside>
+          </section>
+        </section>
+
+        <section class="app-view" id="holidayView" role="tabpanel" aria-labelledby="holidayPageBtn">
+          <section class="workspace">
+            <section class="board-section" aria-labelledby="holidayBoardTitle">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow" id="holidayNameLabel">假期节奏</p>
+                  <h2 id="holidayBoardTitle">假期计划</h2>
+                  <span class="section-subtitle" id="holidayDateLabel"></span>
+                </div>
+                <div class="view-switch" role="tablist" aria-label="假期视图切换">
+                  <button class="segmented active" id="holidayAllView" type="button" role="tab" aria-selected="true">全部</button>
+                  <button class="segmented" id="holidayOpenView" type="button" role="tab" aria-selected="false">未完成</button>
+                </div>
+              </div>
+              <div class="day-grid holiday-day-grid" id="holidayDayGrid"></div>
+            </section>
+
+            <aside class="right-rail">
+              <section class="panel idea-panel" aria-labelledby="holidayIdeaTitle">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">假期收集</p>
+                    <h2 id="holidayIdeaTitle">想法</h2>
+                  </div>
+                  <button class="icon-button subtle" id="holidayClearDoneIdeas" type="button" aria-label="清除已整理假期想法" title="清除已整理假期想法">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M3 6h18" />
+                      <path d="M8 6V4h8v2" />
+                      <path d="m19 6-.7 13.2A2 2 0 0 1 16.3 21H7.7a2 2 0 0 1-2-1.8L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="idea-list" id="holidayIdeaList"></div>
+              </section>
+
+              <section class="panel review-panel" aria-labelledby="holidayReviewTitle">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">假期复盘</p>
+                    <h2 id="holidayReviewTitle">留下结论</h2>
+                  </div>
+                </div>
+                <textarea id="holidayReview" rows="8" placeholder="假期里哪些做到了，哪些要顺延"></textarea>
+              </section>
+            </aside>
+          </section>
+        </section>
+
+        <section class="app-view period-view" id="periodView" role="tabpanel" aria-labelledby="periodPageBtn">
+          <section class="period-page">
+            <section class="panel period-toolbar" aria-labelledby="periodConfigTitle">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">时间范围</p>
+                  <h2 id="periodConfigTitle">周期设置</h2>
+                </div>
+              </div>
+              <form id="periodConfigForm" class="period-config-form">
+                <label class="period-title-field">
+                  <span>名称</span>
+                  <input id="periodTitle" type="text" maxlength="32" autocomplete="off" placeholder="阶段规划" />
+                </label>
+                <label>
+                  <span>开始日期</span>
+                  <input id="periodStart" type="date" />
+                </label>
+                <label>
+                  <span>结束日期</span>
+                  <input id="periodEnd" type="date" />
+                </label>
+                <button class="primary-button" id="periodApplyBtn" type="submit">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+                    <path d="M17 21v-8H7v8" />
+                    <path d="M7 3v5h8" />
+                  </svg>
+                  保存范围
+                </button>
+                <button class="danger-button" id="periodClearBtn" type="button">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <path d="M3 6h18" />
+                    <path d="M8 6V4h8v2" />
+                    <path d="m19 6-.7 13.2A2 2 0 0 1 16.3 21H7.7a2 2 0 0 1-2-1.8L5 6" />
+                    <path d="M10 11v6M14 11v6" />
+                  </svg>
+                  清空格子
+                </button>
+              </form>
+              <div id="periodConfigStatus" class="sync-status compact-status">周期范围需要保持在 15 至 60 天。</div>
+            </section>
+
+            <section class="period-board" aria-labelledby="periodBoardTitle">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow" id="periodRangeMeta">15-60 天</p>
+                  <h2 id="periodBoardTitle">宏观规划</h2>
+                  <span class="section-subtitle" id="periodDateLabel"></span>
+                </div>
+              </div>
+              <div class="period-scroll" aria-label="宏观规划日历">
+                <div class="period-weekdays" aria-hidden="true">
+                  <span></span>
+                  <span>周一</span>
+                  <span>周二</span>
+                  <span>周三</span>
+                  <span>周四</span>
+                  <span>周五</span>
+                  <span>周六</span>
+                  <span>周日</span>
+                </div>
+                <div class="period-grid" id="periodGrid"></div>
+              </div>
+            </section>
+          </section>
+        </section>
+
+        <section class="app-view aggregate-view" id="inboxView" role="tabpanel" aria-labelledby="inboxPageBtn">
+          <section class="aggregate-page">
+            <section class="aggregate-board" aria-labelledby="aggregateTitle">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">统一收纳</p>
+                  <h2 id="aggregateTitle">想法和计划</h2>
+                  <span class="section-subtitle" id="aggregateSummary">待处理 0 · 已收纳 0</span>
+                </div>
+              </div>
+
+              <div class="aggregate-lanes">
+                <section class="aggregate-lane" aria-labelledby="aggregateOpenTitle">
+                  <div class="aggregate-lane-head">
+                    <div>
+                      <p class="eyebrow">待处理</p>
+                      <h3 id="aggregateOpenTitle">还在推进</h3>
+                    </div>
+                    <span class="pill" id="aggregateOpenCount">0</span>
+                  </div>
+                  <div class="aggregate-list" id="aggregateOpenList"></div>
+                </section>
+
+                <section class="aggregate-lane done-lane" aria-labelledby="aggregateDoneTitle">
+                  <div class="aggregate-lane-head">
+                    <div>
+                      <p class="eyebrow">已收纳</p>
+                      <h3 id="aggregateDoneTitle">完成和整理过的</h3>
+                    </div>
+                    <span class="pill" id="aggregateDoneCount">0</span>
+                  </div>
+                  <div class="aggregate-list" id="aggregateDoneList"></div>
+                </section>
+              </div>
+            </section>
+          </section>
+        </section>
+
+        <section class="app-view sync-view" id="syncView" role="tabpanel" aria-labelledby="syncPageBtn">
+          <section class="sync-page">
+            <section class="panel sync-panel" aria-labelledby="syncTitle">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">私有数据</p>
+                  <h2 id="syncTitle">GitHub 同步</h2>
+                </div>
+              </div>
+              <div class="sync-actions">
+                <button class="ghost-button" id="githubSaveConfigBtn" type="button">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+                    <path d="M17 21v-8H7v8" />
+                    <path d="M7 3v5h8" />
+                  </svg>
+                  保存配置
+                </button>
+                <button class="ghost-button" id="githubPullBtn" type="button">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <path d="m7 10 5 5 5-5" />
+                    <path d="M12 15V3" />
+                  </svg>
+                  拉取
+                </button>
+                <button class="primary-button" id="githubPushBtn" type="button">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <path d="m17 8-5-5-5 5" />
+                    <path d="M12 3v12" />
+                  </svg>
+                  推送
+                </button>
+                <button class="danger-button" id="githubClearBtn" type="button">清除</button>
+              </div>
+              <div class="sync-grid">
+                <label>
+                  <span>Owner</span>
+                  <input id="githubOwner" type="text" autocomplete="off" placeholder="qiutao20" />
+                </label>
+                <label>
+                  <span>Repository</span>
+                  <input id="githubRepo" type="text" autocomplete="off" placeholder="private_data" />
+                </label>
+                <label>
+                  <span>Branch</span>
+                  <input id="githubBranch" type="text" autocomplete="off" placeholder="main" />
+                </label>
+                <label>
+                  <span>JSON path</span>
+                  <input id="githubPath" type="text" autocomplete="off" placeholder="weekly-planner-data.json" />
+                </label>
+                <label class="sync-token">
+                  <span>Token</span>
+                  <input id="githubToken" type="password" autocomplete="off" placeholder="Contents read/write token" />
+                </label>
+                <label class="check-row">
+                  <input id="githubAutoPull" type="checkbox" />
+                  打开页面后自动拉取
+                </label>
+                <label class="check-row">
+                  <input id="githubAutoPush" type="checkbox" />
+                  修改后自动推送
+                </label>
+              </div>
+              <div id="githubStatus" class="sync-status">未配置 GitHub 同步。</div>
+            </section>
+
+            <section class="panel sync-panel holiday-config-panel" aria-labelledby="holidayConfigTitle">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">假期版</p>
+                  <h2 id="holidayConfigTitle">假期信息</h2>
+                </div>
+              </div>
+              <form id="holidayConfigForm" class="holiday-config-form">
+                <div class="sync-grid holiday-config-grid">
+                  <label>
+                    <span>假期名</span>
+                    <input id="customHolidayName" type="text" maxlength="24" autocomplete="off" placeholder="中秋节" />
+                  </label>
+                  <label>
+                    <span>开始日期</span>
+                    <input id="customHolidayStart" type="date" />
+                  </label>
+                  <label>
+                    <span>结束日期</span>
+                    <input id="customHolidayEnd" type="date" />
+                  </label>
+                </div>
+                <div class="sync-actions holiday-config-actions">
+                  <button class="primary-button" id="saveHolidayConfigBtn" type="submit">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+                      <path d="M17 21v-8H7v8" />
+                      <path d="M7 3v5h8" />
+                    </svg>
+                    保存并使用
+                  </button>
+                  <button class="ghost-button" id="clearHolidayConfigBtn" type="button">
+                    恢复内置
+                  </button>
+                </div>
+              </form>
+              <div id="holidayConfigStatus" class="sync-status compact-status">未设置自定义假期。</div>
+            </section>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="taskDialog" class="task-dialog">
+      <form method="dialog" id="dialogForm">
+        <div class="dialog-head">
+          <h2>编辑计划</h2>
+          <button class="icon-button subtle" id="closeDialog" type="button" aria-label="关闭" title="关闭">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <input id="dialogTaskId" type="hidden" />
+        <label>
+          内容
+          <input id="dialogTitle" type="text" maxlength="140" required />
+        </label>
+        <div class="dialog-grid">
+          <label>
+            日期
+            <select id="dialogDay"></select>
+          </label>
+          <label>
+            优先级
+            <select id="dialogPriority">
+              <option value="normal">普通</option>
+              <option value="high">重要</option>
+              <option value="low">稍后</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          备注
+          <textarea id="dialogNotes" rows="4" placeholder="进度、依赖、下一步"></textarea>
+        </label>
+        <div class="dialog-actions">
+          <button class="danger-button" id="deleteTask" type="button">删除</button>
+          <button class="primary-button" value="default" type="submit">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js?v=20260622-1"></script>
+  </body>
+</html>
