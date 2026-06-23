@@ -1,0 +1,1413 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thesis Tracker</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f4;
+      --surface: #ffffff;
+      --surface-2: #eef3f1;
+      --ink: #1f2428;
+      --muted: #687178;
+      --line: #d9dfdc;
+      --accent: #0f766e;
+      --accent-2: #2563eb;
+      --warn: #b7791f;
+      --danger: #b42318;
+      --done: #16803c;
+      --shadow: 0 12px 32px rgba(31,36,40,0.08);
+      --radius: 8px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: linear-gradient(180deg,rgba(238,243,241,0.95),rgba(246,247,244,0.98) 42%),
+        radial-gradient(circle at 20% 10%,rgba(15,118,110,0.08),transparent 26%),
+        radial-gradient(circle at 85% 8%,rgba(183,121,31,0.08),transparent 24%), var(--bg);
+      color: var(--ink);
+    }
+    button, input, select, textarea { font: inherit; }
+    button {
+      border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+      border-radius: var(--radius); cursor: pointer; min-height: 36px; padding: 0 12px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap;
+    }
+    button:hover { border-color: #b7c1bd; background: #fbfcfb; }
+    button:disabled { opacity: .62; cursor: not-allowed; }
+    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.primary:hover { background: #0e6b63; }
+    button.danger { color: var(--danger); border-color: rgba(180,35,24,.24); }
+    input, select, textarea {
+      width: 100%; border: 1px solid var(--line); border-radius: var(--radius);
+      background: #fff; color: var(--ink); min-height: 36px; padding: 8px 10px;
+    }
+    textarea { min-height: 92px; resize: vertical; line-height: 1.5; }
+    .icon {
+      width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none;
+      stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto;
+    }
+    .shell { max-width: 1480px; margin: 0 auto; padding: 24px; }
+    header {
+      display: grid; grid-template-columns: minmax(0,1fr) auto;
+      align-items: start; gap: 20px; margin-bottom: 20px;
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: clamp(28px,4vw,46px); line-height: 1.05; }
+    h2 { font-size: 20px; line-height: 1.25; }
+    h3 { font-size: 15px; line-height: 1.25; }
+    .subhead { max-width: 820px; margin-top: 10px; color: var(--muted); line-height: 1.55; }
+
+    /* Deadline box */
+    .deadline-box {
+      width: min(520px,100%); background: var(--surface); border: 1px solid var(--line);
+      border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px;
+    }
+    .deadline-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; }
+    .countdown { display: grid; grid-template-columns: repeat(4,minmax(70px,1fr)); gap: 8px; margin-top: 14px; }
+    .time-cell {
+      background: var(--surface-2); border: 1px solid #dce7e3; border-radius: var(--radius);
+      min-height: 72px; display: grid; place-items: center; padding: 8px;
+    }
+    .time-cell strong { display: block; font-size: 26px; line-height: 1; font-variant-numeric: tabular-nums; }
+    .time-cell span { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; }
+    .deadline-meta { margin-top: 12px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+    /* Tabs */
+    .tabs {
+      position: sticky; top: 0; z-index: 20; display: flex; gap: 8px; padding: 10px 0 14px;
+      background: linear-gradient(180deg,rgba(246,247,244,.98),rgba(246,247,244,.9));
+      backdrop-filter: blur(8px); overflow-x: auto;
+    }
+    .tab-button { min-width: 112px; height: 38px; border-color: #cbd5d1; }
+    .tab-button.active { background: #1f2428; color: #fff; border-color: #1f2428; }
+
+    .view { display: none; }
+    .view.active { display: block; }
+    #data.active { display: grid; gap: 18px; }
+
+    /* Layout */
+    .overview-grid { display: grid; grid-template-columns: minmax(320px,380px) minmax(0,1fr); gap: 18px; align-items: start; }
+    .workspace-grid { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(320px,.8fr); gap: 18px; align-items: start; }
+    .band, .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .band { padding: 18px; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+    .panel-head .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+
+    /* Metrics */
+    .metrics { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+    .metric { min-height: 96px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: #fbfcfb; }
+    .metric span { color: var(--muted); font-size: 12px; }
+    .metric strong { display: block; margin-top: 8px; font-size: 28px; line-height: 1; font-variant-numeric: tabular-nums; }
+
+    /* Badge */
+    .badge {
+      display: inline-flex; align-items: center; justify-content: center; min-height: 26px; padding: 0 9px;
+      border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--muted); font-size: 12px; white-space: nowrap;
+    }
+    .badge.high { color: var(--danger); border-color: rgba(180,35,24,.25); background: #fff7f5; }
+    .badge.medium { color: var(--warn); border-color: rgba(183,121,31,.25); background: #fff8eb; }
+    .badge.low { color: var(--accent); border-color: rgba(15,118,110,.25); background: #effaf7; }
+    .badge.done { color: var(--done); border-color: rgba(22,128,60,.25); background: #e7f7ed; }
+
+    /* Chapter progress */
+    .chapter-progress-list { display: grid; gap: 12px; margin-top: 18px; }
+    .chapter-progress-item { padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: #fbfcfb; cursor: pointer; }
+    .chapter-progress-item:hover { border-color: rgba(15,118,110,.35); background: #f5faf8; }
+    .chapter-progress-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .chapter-progress-header strong { font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chapter-progress-bar { height: 10px; border-radius: 999px; background: #e5ebe8; overflow: hidden; }
+    .chapter-progress-bar > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg,var(--accent),var(--accent-2)); transition: width .3s ease; }
+    .chapter-progress-meta { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; color: var(--muted); font-size: 12px; }
+
+    /* Milestones */
+    .milestone-list { display: grid; gap: 10px; margin-top: 18px; }
+    .milestone-item { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: #fbfcfb; }
+    .milestone-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); background: #fff; }
+    .milestone-dot.done { background: var(--done); border-color: var(--done); }
+    .milestone-dot.doing { background: var(--warn); border-color: var(--warn); }
+    .milestone-item strong { font-size: 14px; }
+
+    /* Calendar */
+    .remaining-calendar { display: grid; gap: 10px; padding: 18px; width: 100%; min-width: 0; min-height: 300px; resize: vertical; overflow: auto; }
+    .calendar-weekdays, .calendar-grid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 6px; }
+    .calendar-weekdays span { color: var(--muted); font-size: 12px; text-align: center; font-weight: 700; }
+    .calendar-day { min-height: 184px; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; display: grid; align-content: start; gap: 6px; }
+    .calendar-day.past { background: #f2f4f2; color: var(--muted); }
+    .calendar-day.today { border-color: rgba(22,128,60,.55); background: #e7f7ed; box-shadow: inset 0 0 0 1px rgba(22,128,60,.3); }
+    .calendar-day.deadline { border-color: rgba(180,35,24,.35); background: #fff7f5; }
+    .calendar-marks { display: flex; flex-wrap: wrap; gap: 4px; }
+    .calendar-mark { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--surface-2); color: var(--muted); }
+    .calendar-mark.today { background: rgba(22,128,60,.16); color: var(--done); }
+    .calendar-mark.deadline { background: rgba(180,35,24,.12); color: var(--danger); }
+    .calendar-mark.milestone { background: rgba(37,99,235,.12); color: var(--accent-2); }
+    .calendar-slots { display: grid; gap: 5px; }
+    .calendar-slot { display: grid; grid-template-columns: 24px minmax(0,1fr); gap: 6px; align-items: stretch; }
+    .calendar-slot-label { display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--muted); background: var(--surface-2); border-radius: 6px; }
+    .calendar-date { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 700; }
+    .calendar-date small { color: var(--muted); font-size: 11px; font-weight: 600; }
+    .calendar-note { min-height: 44px; padding: 5px 6px; border: 1px dashed transparent; border-radius: 6px; color: var(--ink); font-size: 12px; line-height: 1.4; white-space: pre-wrap; outline: none; }
+    .calendar-note:focus { border-color: rgba(15,118,110,.38); background: #f5faf8; }
+    .calendar-slot .calendar-note { min-height: 46px; }
+
+    /* Chapter management */
+    .chapter-tools { display: grid; grid-template-columns: minmax(160px,1fr) repeat(2,minmax(130px,170px)); gap: 10px; padding: 16px 18px; border-bottom: 1px solid var(--line); background: #fbfcfb; }
+    .chapter-list { display: grid; gap: 14px; padding: 18px; }
+    .chapter-card { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; overflow: hidden; }
+    .chapter-card.jump-highlight { border-color: rgba(37,99,235,.48); box-shadow: 0 0 0 2px rgba(37,99,235,.16); }
+    .chapter-main { display: grid; grid-template-columns: minmax(0,1fr) 240px; gap: 16px; padding: 14px; align-items: start; }
+    .chapter-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+    .chapter-title-input { flex: 1; min-width: 200px; font-size: 15px; font-weight: 700; border: 1px solid transparent; background: transparent; padding: 4px 8px; border-radius: 6px; }
+    .chapter-title-input:hover { border-color: var(--line); background: #fbfcfb; }
+    .chapter-title-input:focus { border-color: var(--accent); background: #fff; outline: none; }
+    .chapter-side { display: grid; gap: 8px; align-content: start; }
+    .chapter-words-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .field-label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 5px; }
+
+    /* Sections */
+    .section-list { border-top: 1px solid var(--line); padding: 12px 14px; background: #fbfcfb; }
+    .section-list-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+    .section-list-header h3 { color: var(--muted); }
+    .section-item { display: grid; grid-template-columns: minmax(0,1fr) 100px auto; gap: 8px; align-items: center; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; margin-bottom: 6px; }
+    .section-item input[type="text"] { border: 1px solid transparent; background: transparent; padding: 4px 6px; font-size: 13px; min-height: 28px; }
+    .section-item input[type="text"]:hover { border-color: var(--line); }
+    .section-item input[type="text"]:focus { border-color: var(--accent); outline: none; background: #fff; }
+    .section-item select { min-height: 28px; font-size: 12px; padding: 2px 6px; }
+    .section-item button { min-height: 28px; padding: 0 8px; font-size: 12px; }
+
+    /* Feedback */
+    .feedback-tools { display: grid; grid-template-columns: minmax(160px,1fr) repeat(2,minmax(120px,160px)); gap: 10px; padding: 16px 18px; border-bottom: 1px solid var(--line); background: #fbfcfb; }
+    .feedback-list { display: grid; gap: 10px; padding: 18px; }
+    .feedback-card { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; overflow: hidden; }
+    .feedback-header { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); background: #fbfcfb; }
+    .feedback-body { padding: 12px 14px; display: grid; gap: 10px; }
+    .feedback-text { border: 1px solid #dfe6e3; border-radius: var(--radius); background: #fbfcfb; padding: 10px 12px; color: var(--ink); font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+    .feedback-response-block { border: 1px solid rgba(37,99,235,.28); border-radius: var(--radius); background: #f5f8ff; padding: 10px 12px; }
+    .feedback-response-block .field-label { display: flex; align-items: center; gap: 6px; color: var(--accent-2); font-weight: 700; margin-bottom: 8px; }
+    .feedback-response-block textarea { min-height: 72px; background: #fff; border-color: rgba(37,99,235,.24); }
+    .feedback-response-block textarea:focus { border-color: var(--accent-2); outline: none; box-shadow: 0 0 0 2px rgba(37,99,235,.14); }
+    .feedback-actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; padding: 8px 14px; border-top: 1px solid var(--line); }
+
+    .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; padding: 18px; }
+    .form-grid .wide { grid-column: 1 / -1; }
+
+    /* Log */
+    .log-list { display: grid; gap: 10px; padding: 18px; }
+    .log-entry { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; padding: 12px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; }
+    .log-entry time { display: block; color: var(--muted); font-size: 12px; margin-bottom: 5px; }
+    .log-entry p { line-height: 1.5; font-size: 14px; margin: 0; }
+
+    /* Data */
+    .sync-status { min-height: 42px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: #fbfcfb; color: var(--muted); font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+    .check-row { display: flex; align-items: center; gap: 9px; color: var(--ink); font-size: 13px; }
+    .check-row input { width: auto; min-height: auto; flex: 0 0 auto; }
+
+    /* Storyline */
+    .storyline-layout { display: grid; gap: 18px; }
+    .narrative-block { }
+    .narrative-block textarea { min-height: 140px; font-size: 14px; line-height: 1.7; }
+    .rp-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(340px,1fr)); gap: 16px; }
+    .rp-card { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; overflow: hidden; transition: box-shadow .15s; }
+    .rp-card:hover { box-shadow: 0 4px 16px rgba(31,36,40,0.08); }
+    .rp-card-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); background: #fbfcfb; }
+    .rp-number { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg,var(--accent),var(--accent-2)); color: #fff; font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+    .rp-card-head input[type="text"] { flex: 1; font-size: 15px; font-weight: 700; border: 1px solid transparent; background: transparent; padding: 4px 8px; border-radius: 6px; }
+    .rp-card-head input[type="text"]:hover { border-color: var(--line); background: #fff; }
+    .rp-card-head input[type="text"]:focus { border-color: var(--accent); background: #fff; outline: none; }
+    .rp-card-body { padding: 14px 16px; display: grid; gap: 10px; }
+    .rp-card-body textarea { min-height: 68px; font-size: 13px; line-height: 1.6; }
+    .rp-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); background: #fbfcfb; }
+    .rp-status-sel { min-height: 28px; font-size: 12px; padding: 2px 8px; border-radius: 999px; cursor: pointer; width: auto; }
+    .conn-block { }
+    .conn-block textarea { min-height: 120px; font-size: 14px; line-height: 1.7; }
+    .rp-flow { display: flex; align-items: center; gap: 0; padding: 16px 18px; overflow-x: auto; }
+    .rp-flow-node { flex: 0 0 auto; min-width: 120px; max-width: 200px; padding: 10px 14px; border: 2px solid var(--accent); border-radius: var(--radius); background: #effaf7; text-align: center; font-size: 13px; font-weight: 600; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rp-flow-arrow { flex: 0 0 auto; width: 40px; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+    .rp-flow-arrow svg { width: 24px; height: 24px; }
+
+    .empty { padding: 28px; color: var(--muted); text-align: center; border: 1px dashed #c6d0cc; border-radius: var(--radius); background: #fbfcfb; }
+    .timeline { display: grid; gap: 10px; padding: 18px; min-width: 0; overflow: hidden; }
+    .toast {
+      position: fixed; right: 20px; bottom: 20px; max-width: min(420px,calc(100vw - 40px));
+      background: #1f2428; color: #fff; border-radius: var(--radius); padding: 12px 14px;
+      box-shadow: var(--shadow); opacity: 0; transform: translateY(12px); pointer-events: none;
+      transition: opacity 160ms ease, transform 160ms ease; z-index: 50; line-height: 1.45;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    /* Setup wizard */
+    .wizard-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(31,36,40,.45); backdrop-filter: blur(4px);
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .wizard-overlay.hidden { display: none; }
+    .wizard-box {
+      width: min(580px,100%); max-height: calc(100vh - 48px); overflow-y: auto;
+      background: var(--surface); border-radius: 12px; box-shadow: 0 24px 64px rgba(31,36,40,.18);
+      padding: 32px;
+    }
+    .wizard-box h1 { font-size: 24px; margin-bottom: 6px; }
+    .wizard-box .subhead { margin-top: 4px; margin-bottom: 24px; }
+    .wizard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .wizard-grid .wide { grid-column: 1 / -1; }
+    .wizard-grid label { display: block; }
+    .wizard-grid .field-label { margin-bottom: 6px; font-weight: 600; color: var(--ink); font-size: 13px; }
+    .wizard-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+    .wizard-actions button { min-height: 42px; padding: 0 24px; font-size: 15px; }
+    .radio-group { display: flex; gap: 12px; }
+    .radio-card {
+      flex: 1; padding: 14px; border: 2px solid var(--line); border-radius: var(--radius);
+      cursor: pointer; text-align: center; transition: border-color .15s, background .15s;
+    }
+    .radio-card:hover { border-color: #b7c1bd; }
+    .radio-card.selected { border-color: var(--accent); background: #effaf7; }
+    .radio-card strong { display: block; font-size: 15px; margin-bottom: 4px; }
+    .radio-card span { color: var(--muted); font-size: 12px; }
+
+    @media (max-width: 1120px) {
+      header, .overview-grid, .workspace-grid { grid-template-columns: 1fr; }
+      .deadline-box { width: 100%; }
+    }
+    @media (max-width: 760px) {
+      .shell { padding: 16px; }
+      .countdown, .metrics, .chapter-tools, .feedback-tools, .chapter-main, .form-grid, .wizard-grid { grid-template-columns: 1fr; }
+      .panel-head { align-items: flex-start; flex-direction: column; }
+      .panel-head .actions, .tabs { width: 100%; }
+      .remaining-calendar { overflow-x: auto; }
+      .calendar-weekdays, .calendar-grid { min-width: 560px; }
+      .tab-button { min-width: 96px; }
+      .section-item { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== Setup Wizard ===== -->
+  <div class="wizard-overlay hidden" id="wizardOverlay">
+    <div class="wizard-box">
+      <h1>Welcome to Thesis Tracker</h1>
+      <p class="subhead">填写基本信息后开始使用，所有内容之后都可以修改。</p>
+      <div class="wizard-grid">
+        <div class="wide">
+          <span class="field-label">学位类型</span>
+          <div class="radio-group" id="wizDegreeGroup">
+            <div class="radio-card selected" data-value="master">
+              <strong>硕士</strong>
+              <span>Master's Thesis</span>
+            </div>
+            <div class="radio-card" data-value="phd">
+              <strong>博士</strong>
+              <span>Doctoral Dissertation</span>
+            </div>
+          </div>
+        </div>
+        <label class="wide">
+          <span class="field-label">论文题目（可之后再填）</span>
+          <input id="wizTitle" type="text" placeholder="例：基于深度学习的...研究">
+        </label>
+        <label>
+          <span class="field-label">作者姓名</span>
+          <input id="wizAuthor" type="text" placeholder="你的名字">
+        </label>
+        <label>
+          <span class="field-label">导师姓名</span>
+          <input id="wizAdvisor" type="text" placeholder="导师姓名">
+        </label>
+        <label>
+          <span class="field-label">答辩截止日期（可选）</span>
+          <input id="wizDeadline" type="date">
+        </label>
+        <label>
+          <span class="field-label">章节数量</span>
+          <input id="wizChapterCount" type="number" min="3" max="15" value="6">
+        </label>
+        <div class="wide" id="wizChapterNamesBox">
+          <span class="field-label">章节名称（每行一章，可修改）</span>
+          <textarea id="wizChapterNames" style="min-height:160px;font-size:13px;line-height:1.6;"></textarea>
+        </div>
+      </div>
+      <div class="wizard-actions">
+        <button id="wizSkipBtn">跳过，使用默认</button>
+        <button id="wizStartBtn" class="primary">开始使用</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Main App ===== -->
+  <div class="shell" id="appShell">
+    <header>
+      <div>
+        <h1 id="projectTitle">Thesis Tracker</h1>
+        <p class="subhead" id="projectSubtitle">论文撰写进度管理工具</p>
+      </div>
+      <section class="deadline-box" aria-label="deadline">
+        <div class="deadline-title">
+          <span id="deadlineLabel">未设置截止时间</span>
+          <span class="badge high" id="deadlineState">倒计时</span>
+        </div>
+        <div class="countdown">
+          <div class="time-cell"><strong id="cDays">--</strong><span>天</span></div>
+          <div class="time-cell"><strong id="cHours">--</strong><span>小时</span></div>
+          <div class="time-cell"><strong id="cMinutes">--</strong><span>分钟</span></div>
+          <div class="time-cell"><strong id="cSeconds">--</strong><span>秒</span></div>
+        </div>
+        <p class="deadline-meta" id="deadlineMeta">在数据中设置 deadline 后显示倒计时。</p>
+      </section>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab-button active" data-view="overview">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-7"/></svg> 总览
+      </button>
+      <button class="tab-button" data-view="storyline">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><path d="M10 21h4"/><path d="M9 17h6"/></svg> 构思
+      </button>
+      <button class="tab-button" data-view="chapters">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15z"/></svg> 章节管理
+      </button>
+      <button class="tab-button" data-view="feedback">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 导师反馈
+      </button>
+      <button class="tab-button" data-view="calendar">
+        <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg> 日历
+      </button>
+      <button class="tab-button" data-view="log">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg> 日志
+      </button>
+      <button class="tab-button" data-view="data">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg> 数据
+      </button>
+    </nav>
+
+    <main>
+      <!-- Overview -->
+      <section id="overview" class="view active">
+        <div class="overview-grid">
+          <section class="band">
+            <div class="metrics">
+              <div class="metric"><span>总章节</span><strong id="metricCh">0</strong></div>
+              <div class="metric"><span>已定稿</span><strong id="metricFinal">0</strong></div>
+              <div class="metric"><span>总字数</span><strong id="metricWords">0</strong></div>
+              <div class="metric"><span>整体进度</span><strong id="metricPct">0%</strong></div>
+            </div>
+            <div class="chapter-progress-list" id="cpList"></div>
+            <div class="milestone-list" id="msList"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>剩余时间日历</h2>
+              <span class="badge medium" id="overviewRemain">剩余时间</span>
+            </div>
+            <div class="timeline" id="overviewCal"></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- Storyline -->
+      <section id="storyline" class="view">
+        <div class="storyline-layout">
+          <section class="panel narrative-block">
+            <div class="panel-head">
+              <h2>论文故事线</h2>
+              <span class="badge low">整体构思</span>
+            </div>
+            <div style="padding:18px">
+              <span class="field-label">用几段话描述你的论文想讲一个什么故事：从什么背景出发，发现了什么问题，用什么方法分几步解决，最终得出什么结论。</span>
+              <textarea id="slNarrative" placeholder="例：本文围绕 XXX 领域中 YYY 问题展开研究。现有方法存在 A、B 两方面不足，本文提出了……&#10;&#10;第一个研究点解决……&#10;第二个研究点进一步……&#10;第三个研究点在此基础上……&#10;&#10;三个研究点层层递进，共同构成了一套完整的 XXX 解决方案。" style="min-height:160px"></textarea>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>研究点</h2>
+              <div class="actions">
+                <span class="badge medium" id="rpCount">0 个研究点</span>
+                <button id="addRpBtn" class="primary">
+                  <svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg> 添加研究点
+                </button>
+              </div>
+            </div>
+            <div id="rpFlow" class="rp-flow" style="display:none"></div>
+            <div class="rp-grid" id="rpGrid" style="padding:18px"></div>
+          </section>
+
+          <section class="panel conn-block">
+            <div class="panel-head">
+              <h2>研究点之间的逻辑关系</h2>
+              <span class="badge low">串联思路</span>
+            </div>
+            <div style="padding:18px">
+              <span class="field-label">描述各研究点之间的逻辑关系：是层层递进、互相补充，还是从不同角度解决同一问题？它们如何共同支撑你的论文主题？</span>
+              <textarea id="slConnections" placeholder="例：研究点一提供了基础理论框架，研究点二在此框架上提出改进算法，研究点三将改进后的算法应用于实际场景验证。三者形成「理论→方法→应用」的递进关系。"></textarea>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- Chapters -->
+      <section id="chapters" class="view">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>章节管理</h2>
+            <div class="actions">
+              <button id="addChapterBtn" class="primary">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg> 添加章节
+              </button>
+            </div>
+          </div>
+          <div class="chapter-tools">
+            <label><span class="field-label">搜索</span><input id="chSearch" type="search" placeholder="搜索章节..."></label>
+            <label><span class="field-label">状态</span>
+              <select id="chStatusFilter">
+                <option value="All">全部</option><option value="todo">未开始</option><option value="writing">撰写中</option>
+                <option value="draft">初稿完成</option><option value="revising">修改中</option><option value="final">定稿</option>
+              </select>
+            </label>
+          </div>
+          <div class="chapter-list" id="chList"></div>
+        </section>
+      </section>
+
+      <!-- Feedback -->
+      <section id="feedback" class="view">
+        <div class="workspace-grid">
+          <section class="panel">
+            <div class="panel-head">
+              <h2>导师反馈记录</h2>
+              <span class="badge low" id="fbStats">0 / 0</span>
+            </div>
+            <div class="feedback-tools">
+              <label><span class="field-label">搜索</span><input id="fbSearch" type="search" placeholder="搜索反馈..."></label>
+              <label><span class="field-label">章节</span><select id="fbChFilter"></select></label>
+              <label><span class="field-label">状态</span>
+                <select id="fbStFilter"><option value="All">全部</option><option value="todo">待处理</option><option value="doing">处理中</option><option value="done">已解决</option></select>
+              </label>
+            </div>
+            <div class="feedback-list" id="fbList"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2>新增反馈</h2></div>
+            <div class="form-grid">
+              <label><span class="field-label">日期</span><input id="fbDate" type="date"></label>
+              <label><span class="field-label">轮次</span><input id="fbRound" type="number" min="1" value="1"></label>
+              <label><span class="field-label">关联章节</span><select id="fbChSel"></select></label>
+              <label><span class="field-label">状态</span>
+                <select id="fbNewSt"><option value="todo">待处理</option><option value="doing">处理中</option><option value="done">已解决</option></select>
+              </label>
+              <label class="wide"><span class="field-label">导师意见</span><textarea id="fbContent" placeholder="记录导师的修改意见..."></textarea></label>
+              <label class="wide"><span class="field-label">处理方案</span><textarea id="fbResponse" placeholder="你的处理方案..."></textarea></label>
+              <div class="wide" style="text-align:right;">
+                <button id="addFbBtn" class="primary">
+                  <svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg> 添加反馈
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- Calendar -->
+      <section id="calendar" class="view">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>日历规划</h2>
+            <span class="badge medium" id="calRemain">剩余时间</span>
+          </div>
+          <div class="timeline" id="calView"></div>
+        </section>
+      </section>
+
+      <!-- Log -->
+      <section id="log" class="view">
+        <div class="workspace-grid">
+          <section class="panel">
+            <div class="panel-head">
+              <h2>工作日志</h2>
+              <button id="addLogBtn" class="primary">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg> 添加记录
+              </button>
+            </div>
+            <div class="log-list" id="logList"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2>新增记录</h2></div>
+            <div class="form-grid">
+              <label><span class="field-label">时间</span><input id="logTime" type="datetime-local"></label>
+              <label><span class="field-label">类别</span>
+                <select id="logCat"><option>写作</option><option>实验</option><option>阅读</option><option>讨论</option><option>修改</option><option>其他</option></select>
+              </label>
+              <label class="wide"><span class="field-label">内容</span><textarea id="logText" placeholder="今天完成了什么..."></textarea></label>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- Data -->
+      <section id="data" class="view">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>基本信息</h2>
+            <div class="actions">
+              <button id="infoSaveBtn" class="primary"><svg class="icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg> 保存修改</button>
+            </div>
+          </div>
+          <div class="form-grid">
+            <div class="wide">
+              <span class="field-label">学位类型</span>
+              <div class="radio-group" id="infoDegreeGroup">
+                <div class="radio-card" data-value="master">
+                  <strong>硕士</strong><span>Master's Thesis</span>
+                </div>
+                <div class="radio-card" data-value="phd">
+                  <strong>博士</strong><span>Doctoral Dissertation</span>
+                </div>
+              </div>
+            </div>
+            <label class="wide"><span class="field-label">论文题目</span><input id="infoTitle" type="text" placeholder="例：基于深度学习的...研究"></label>
+            <label><span class="field-label">作者姓名</span><input id="infoAuthor" type="text" placeholder="你的名字"></label>
+            <label><span class="field-label">导师姓名</span><input id="infoAdvisor" type="text" placeholder="导师姓名"></label>
+            <label><span class="field-label">答辩截止日期</span><input id="infoDeadline" type="date"></label>
+            <div></div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>GitHub 同步</h2>
+            <div class="actions">
+              <button id="ghSaveBtn"><svg class="icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg> 保存配置</button>
+              <button id="ghPullBtn"><svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg> 拉取远端</button>
+              <button id="ghPushBtn" class="primary"><svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg> 推送数据</button>
+              <button id="ghClearBtn" class="danger"><svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 16h10l1-16"/></svg> 清除配置</button>
+            </div>
+          </div>
+          <div class="form-grid">
+            <label><span class="field-label">Owner</span><input id="ghOwner" type="text" autocomplete="off" placeholder="username"></label>
+            <label><span class="field-label">Repository</span><input id="ghRepo" type="text" autocomplete="off" placeholder="private_data"></label>
+            <label><span class="field-label">Branch</span><input id="ghBranch" type="text" autocomplete="off" placeholder="main"></label>
+            <label><span class="field-label">JSON path</span><input id="ghPath" type="text" autocomplete="off" placeholder="thesis-progress.json"></label>
+            <label class="wide"><span class="field-label">Token</span><input id="ghToken" type="password" autocomplete="off" placeholder="Fine-grained PAT"></label>
+            <label class="check-row"><input id="ghAutoPull" type="checkbox"> 打开页面后自动拉取远端</label>
+            <label class="check-row"><input id="ghAutoPush" type="checkbox"> 修改后自动推送到 GitHub</label>
+            <label class="wide"><span class="field-label">同步状态</span><div id="ghStatus" class="sync-status">未配置 GitHub 同步。</div></label>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>数据导入导出</h2>
+            <div class="actions">
+              <button id="linkFileBtn"><svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg> 链接本地文件</button>
+              <button id="exportBtn" class="primary"><svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg> 导出 JSON</button>
+              <button id="resetBtn" class="danger"><svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 16h10l1-16"/><path d="M10 11v6"/><path d="M14 11v6"/></svg> 重置</button>
+            </div>
+          </div>
+          <div class="form-grid">
+            <label class="wide"><span class="field-label">本地文件自动保存</span><div id="fileStatus" style="color:var(--muted);font-size:13px;line-height:1.55;">未链接本地文件。</div></label>
+            <label class="wide"><span class="field-label">导入 JSON</span><input id="importFile" type="file" accept="application/json"></label>
+            <label class="wide"><span class="field-label">当前数据快照</span><textarea id="dataSnap" readonly></textarea></label>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+
+/* ============================== Constants ============================== */
+var STORAGE_KEY = "thesis-tracker-v2";
+var GH_CFG_KEY = "thesis-tracker-gh-v2";
+var GH_API = "https://api.github.com";
+var GH_VER = "2022-11-28";
+var HAD_STATE = Boolean(localStorage.getItem(STORAGE_KEY));
+var LOCAL_PATH = new URLSearchParams(location.search).get("data") || "thesis-progress.json";
+
+var CH_STATUS = [
+  {v:"todo",l:"未开始"},{v:"writing",l:"撰写中"},{v:"draft",l:"初稿完成"},
+  {v:"revising",l:"修改中"},{v:"final",l:"定稿"}
+];
+var SEC_STATUS = [{v:"todo",l:"未开始"},{v:"writing",l:"撰写中"},{v:"done",l:"已完成"}];
+var FB_STATUS = [{v:"todo",l:"待处理"},{v:"doing",l:"处理中"},{v:"done",l:"已解决"}];
+var MS_STATUS = [{v:"todo",l:"未完成"},{v:"doing",l:"进行中"},{v:"done",l:"已完成"}];
+var RP_STATUS = [{v:"idea",l:"构想中"},{v:"developing",l:"深化中"},{v:"solid",l:"已成熟"},{v:"complete",l:"已落地"}];
+
+var MASTER_MILESTONES = [
+  {id:"m1",title:"开题报告",date:"",status:"done"},
+  {id:"m2",title:"中期检查",date:"",status:"todo"},
+  {id:"m3",title:"初稿完成",date:"",status:"todo"},
+  {id:"m4",title:"预答辩",date:"",status:"todo"},
+  {id:"m5",title:"论文送审",date:"",status:"todo"},
+  {id:"m6",title:"正式答辩",date:"",status:"todo"}
+];
+var PHD_MILESTONES = [
+  {id:"m1",title:"开题报告",date:"",status:"done"},
+  {id:"m2",title:"中期考核",date:"",status:"todo"},
+  {id:"m3",title:"预答辩",date:"",status:"todo"},
+  {id:"m4",title:"盲审送审",date:"",status:"todo"},
+  {id:"m5",title:"正式答辩",date:"",status:"todo"},
+  {id:"m6",title:"学位授予",date:"",status:"todo"}
+];
+
+var MASTER_CHAPTERS = ["第一章 绪论","第二章 相关知识","第三章 研究点一","第四章 研究点二","第五章 研究点三","第六章 总结与展望"];
+var PHD_CHAPTERS = ["第一章 绪论","第二章 文献综述","第三章 理论基础","第四章 研究点一","第五章 研究点二","第六章 研究点三","第七章 研究点四","第八章 研究点五","第九章 总结与展望"];
+
+var DEFAULT_GH = {owner:"",repo:"",branch:"main",path:"thesis-progress.json",token:"",autoPull:false,autoPush:false,sha:"",lastSync:"",dirty:false};
+
+/* ============================== Utility ============================== */
+function $(s){return document.querySelector(s)}
+function $$(s){return document.querySelectorAll(s)}
+function clone(v){return JSON.parse(JSON.stringify(v))}
+function esc(v){return String(v==null?"":v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+function toast(m){var t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(toast._t);toast._t=setTimeout(function(){t.classList.remove("show")},2200)}
+function statusL(arr,v){var o=arr.find(function(x){return x.v===v});return o?o.l:v}
+function badgeCls(v){if(v==="done"||v==="final")return"done";if(v==="doing"||v==="writing"||v==="revising"||v==="draft")return"medium";return""}
+function optHtml(arr,cur){return arr.map(function(o){return '<option value="'+esc(o.v)+'"'+(o.v===cur?" selected":"")+'>'+esc(o.l)+'</option>'}).join("")}
+function fillSel(el,arr,cur){if(!el)return;el.innerHTML=arr.map(function(o){var v=typeof o==="string"?o:o.v,l=typeof o==="string"?o:o.l;return '<option value="'+esc(v)+'"'+(v===cur?" selected":"")+'>'+esc(l)+'</option>'}).join("")}
+
+function startDay(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate())}
+function addDays(d,n){var r=new Date(d);r.setDate(r.getDate()+n);return r}
+function dayKey(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function sameDay(a,b){return dayKey(a)===dayKey(b)}
+function monday(d){var s=startDay(d);return addDays(s,-((s.getDay()+6)%7))}
+function sunday(d){return addDays(monday(d),6)}
+function nowLocal(){var d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16)}
+function dl(fn,ct,ty){var b=new Blob([ct],{type:ty}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download=fn;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(u)}
+
+/* ============================== State ============================== */
+function makeChapters(names){
+  return names.map(function(t,i){
+    var secs=[];
+    if(i===0) secs=[
+      {id:"s0-1",title:"研究背景与意义",status:"todo",notes:""},
+      {id:"s0-2",title:"国内外研究现状",status:"todo",notes:""},
+      {id:"s0-3",title:"主要研究内容",status:"todo",notes:""},
+      {id:"s0-4",title:"论文创新点",status:"todo",notes:""},
+      {id:"s0-5",title:"论文组织结构",status:"todo",notes:""}
+    ];
+    return {id:"ch"+(i+1),title:t,order:i+1,targetWords:i===0?8000:(i===names.length-1?3000:10000),currentWords:0,status:"todo",sections:secs,notes:""};
+  });
+}
+
+function defaultState(degree){
+  var d=degree||"master";
+  return {
+    project:{title:"进度",subtitle:"论文撰写进度、导师反馈与章节管理工具",deadline:"",deadlineLabel:"未设置截止时间",deadlineMeta:"在数据中设置 deadline 后显示倒计时。",thesisTitle:"",author:"",advisor:"",degree:d},
+    chapters:makeChapters(d==="phd"?PHD_CHAPTERS:MASTER_CHAPTERS),
+    milestones:clone(d==="phd"?PHD_MILESTONES:MASTER_MILESTONES),
+    storyline:{narrative:"",researchPoints:[],connections:""},
+    feedback:[],logs:[],calendarNotes:{},ui:{notesExpanded:false}
+  };
+}
+
+function normCalNotes(n){
+  var s=n&&typeof n==="object"?n:{},r={};
+  Object.keys(s).forEach(function(k){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(k)){var t=k+"@early";if(s[k]&&!(t in s))r[t]=s[k];}
+    else r[k]=s[k];
+  });
+  return r;
+}
+
+function normState(input,fb){
+  var s=input&&typeof input==="object"?input:{};
+  var b=fb&&typeof fb==="object"?fb:defaultState();
+  var dp=defaultState().project;
+  return {
+    project:Object.assign({},dp,b.project||{},s.project||{}),
+    chapters:Array.isArray(s.chapters)?s.chapters:(Array.isArray(b.chapters)?b.chapters:makeChapters(MASTER_CHAPTERS)),
+    milestones:Array.isArray(s.milestones)?s.milestones:(Array.isArray(b.milestones)?b.milestones:clone(MASTER_MILESTONES)),
+    feedback:Array.isArray(s.feedback)?s.feedback:(Array.isArray(b.feedback)?b.feedback:[]),
+    logs:Array.isArray(s.logs)?s.logs:(Array.isArray(b.logs)?b.logs:[]),
+    storyline:Object.assign({narrative:"",researchPoints:[],connections:""},b.storyline||{},s.storyline||{},
+      {researchPoints:Array.isArray((s.storyline||{}).researchPoints)?(s.storyline||{}).researchPoints:(Array.isArray((b.storyline||{}).researchPoints)?(b.storyline||{}).researchPoints:[])}),
+    calendarNotes:normCalNotes(s.calendarNotes&&typeof s.calendarNotes==="object"?s.calendarNotes:(b.calendarNotes||{})),
+    ui:Object.assign({notesExpanded:false},b.ui||{},s.ui||{})
+  };
+}
+
+function loadState(){
+  var s=localStorage.getItem(STORAGE_KEY);
+  if(!s)return defaultState();
+  try{return normState(JSON.parse(s),defaultState())}catch(e){console.warn(e);return defaultState()}
+}
+
+var state=loadState();
+var chF={search:"",status:"All"};
+var fbF={search:"",chapter:"All",status:"All"};
+
+/* ============================== Persistence ============================== */
+function saveState(opts){
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state,null,2));
+  updSnap();writeToFile();
+  if(!opts||opts.gh!==false)markDirty();
+}
+function updSnap(){var el=$("#dataSnap");if(el)el.value=JSON.stringify(state,null,2)}
+
+/* -- File System Access API -- */
+var fh=null,fperm=false,fwt=null;
+function fsOk(){return typeof window.showSaveFilePicker==="function"}
+function idb(mode,val){
+  return new Promise(function(ok,no){
+    var op=indexedDB.open("thesis-fs",1);
+    op.onupgradeneeded=function(){op.result.createObjectStore("h")};
+    op.onerror=function(){no(op.error)};
+    op.onsuccess=function(){
+      var db=op.result,tx=db.transaction("h",mode==="get"?"readonly":"readwrite"),st=tx.objectStore("h");
+      var r=mode==="get"?st.get("f"):st.put(val,"f");
+      r.onsuccess=function(){ok(r.result)};r.onerror=function(){no(r.error)};
+    };
+  });
+}
+function chkPerm(h,ask){
+  var o={mode:"readwrite"};
+  return h.queryPermission(o).then(function(v){
+    if(v==="granted")return true;
+    if(ask)return h.requestPermission(o).then(function(v2){return v2==="granted"});
+    return false;
+  });
+}
+function writeToFile(now){
+  if(!fh||!fperm)return;
+  function doW(){return fh.createWritable().then(function(w){return w.write(JSON.stringify(state,null,2)).then(function(){return w.close()})}).catch(function(e){console.error(e)})}
+  clearTimeout(fwt);
+  if(now)return doW();
+  fwt=setTimeout(doW,400);
+}
+function updFileStatus(){
+  var s=$("#fileStatus"),b=$("#linkFileBtn");if(!s||!b)return;
+  if(fh&&fperm){s.textContent="已链接: "+fh.name+" -- 修改自动写入。";}
+  else if(fh){s.textContent="已记住文件: "+fh.name+"，点击恢复写入。";}
+  else{s.textContent=fsOk()?"未链接本地文件（数据仅存于浏览器）。":"当前浏览器不支持自动写文件（建议用 Chrome/Edge）。";}
+}
+function onLinkFile(){
+  if(!fsOk()){toast("浏览器不支持，请用导出 JSON");return}
+  if(fh&&!fperm){chkPerm(fh,true).then(function(ok){fperm=ok;if(ok){writeToFile(true);toast("已恢复自动保存")}updFileStatus()});return}
+  window.showSaveFilePicker({suggestedName:"thesis-progress.json",types:[{description:"JSON",accept:{"application/json":[".json"]}}]})
+  .then(function(h){fh=h;return chkPerm(h,true).then(function(ok){fperm=ok;return idb("put",h)}).then(function(){return writeToFile(true)}).then(function(){updFileStatus();toast("已链接本地文件")})})
+  .catch(function(e){if(e&&e.name!=="AbortError"){console.error(e);toast("链接失败")}});
+}
+function restoreFL(){
+  if(!fsOk()){updFileStatus();return}
+  idb("get").then(function(h){if(h){fh=h;return chkPerm(h,false).then(function(ok){fperm=ok})}}).catch(function(e){console.error(e)}).then(updFileStatus);
+}
+
+/* -- GitHub Sync -- */
+var ghCfg=loadGH();var ghTimer=null;var ghBusy=false;
+function loadGH(){
+  var s=localStorage.getItem(GH_CFG_KEY);if(!s)return clone(DEFAULT_GH);
+  try{var p=JSON.parse(s);return Object.assign({},DEFAULT_GH,p)}catch(e){return clone(DEFAULT_GH)}
+}
+function saveGH(){localStorage.setItem(GH_CFG_KEY,JSON.stringify(ghCfg))}
+function ghOk(needTk){return Boolean(ghCfg.owner&&ghCfg.repo&&ghCfg.branch&&ghCfg.path&&(!needTk||ghCfg.token))}
+function popGH(){
+  var m={ghOwner:"owner",ghRepo:"repo",ghBranch:"branch",ghPath:"path",ghToken:"token"};
+  Object.keys(m).forEach(function(id){var el=$("#"+id);if(el)el.value=ghCfg[m[id]]||""});
+  var ap=$("#ghAutoPull"),apush=$("#ghAutoPush");
+  if(ap)ap.checked=!!ghCfg.autoPull;if(apush)apush.checked=!!ghCfg.autoPush;
+}
+function readGH(){
+  ghCfg.owner=($("#ghOwner").value||"").trim();
+  ghCfg.repo=($("#ghRepo").value||"").trim();
+  ghCfg.branch=($("#ghBranch").value||"").trim()||"main";
+  ghCfg.path=($("#ghPath").value||"").trim()||"thesis-progress.json";
+  ghCfg.token=($("#ghToken").value||"").trim();
+  ghCfg.autoPull=$("#ghAutoPull").checked;
+  ghCfg.autoPush=$("#ghAutoPush").checked;
+  saveGH();updGHSt();
+}
+function updGHSt(msg){
+  var el=$("#ghStatus");if(!el)return;var l=[];
+  if(msg)l.push(msg);
+  if(ghOk(false)){
+    l.push("目标: "+ghCfg.owner+"/"+ghCfg.repo+"@"+ghCfg.branch+":"+ghCfg.path);
+    l.push(ghCfg.token?"Token: 已保存":"Token: 未填写");
+    l.push(ghCfg.dirty?"状态: 本地有未推送修改":"状态: 已保存");
+    if(ghCfg.lastSync)l.push("上次同步: "+new Date(ghCfg.lastSync).toLocaleString("zh-CN"));
+  }else{l.push("未配置 GitHub 同步。")}
+  el.textContent=l.join("\n");
+}
+function setGHBusy(b){ghBusy=b;["ghSaveBtn","ghPullBtn","ghPushBtn","ghClearBtn"].forEach(function(id){var el=$("#"+id);if(el)el.disabled=b})}
+function markDirty(){ghCfg.dirty=true;saveGH();updGHSt();schedAuto()}
+function schedAuto(){clearTimeout(ghTimer);if(!ghCfg.autoPush||!ghOk())return;updGHSt("将在 6 秒后自动推送...");ghTimer=setTimeout(function(){ghPush({auto:true})},6000)}
+function ghUrl(ref){
+  var o=encodeURIComponent(ghCfg.owner),r=encodeURIComponent(ghCfg.repo);
+  var p=ghCfg.path.replace(/^\/+/,"").split("/").filter(Boolean).map(encodeURIComponent).join("/");
+  return GH_API+"/repos/"+o+"/"+r+"/contents/"+p+(ref?"?ref="+encodeURIComponent(ghCfg.branch):"");
+}
+function ghHdr(){var h={Accept:"application/vnd.github+json","X-GitHub-Api-Version":GH_VER};if(ghCfg.token)h.Authorization="Bearer "+ghCfg.token;return h}
+function u2b(v){var b=new TextEncoder().encode(v);var s="";for(var i=0;i<b.length;i+=0x8000)s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(s)}
+function b2u(v){var bin=atob(String(v||"").replace(/\s/g,""));var b=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return new TextDecoder().decode(b)}
+
+function ghRead(){
+  return fetch(ghUrl(true),{headers:ghHdr()}).then(function(r){
+    if(r.status===404)return null;
+    if(!r.ok)return r.json().then(function(j){throw new Error("GitHub "+r.status+": "+(j.message||r.statusText))});
+    return r.json().then(function(p){return{sha:p.sha,text:b2u(p.content||"")}});
+  });
+}
+function ghWrite(ct,sha){
+  var body={message:"Update thesis tracker "+new Date().toISOString(),content:u2b(ct),branch:ghCfg.branch};
+  if(sha)body.sha=sha;
+  return fetch(ghUrl(false),{method:"PUT",headers:Object.assign({},ghHdr(),{"Content-Type":"application/json"}),body:JSON.stringify(body)})
+  .then(function(r){if(!r.ok)return r.json().then(function(j){throw new Error("GitHub "+r.status+": "+(j.message||r.statusText))});return r.json()});
+}
+
+function ghPull(opts){
+  if(ghBusy)return;opts=opts||{};if(!opts.auto)readGH();
+  if(!ghOk()){updGHSt("请先填写完整配置。");toast("配置不完整");return}
+  setGHBusy(true);updGHSt("正在拉取...");
+  ghRead().then(function(rem){
+    if(!rem){updGHSt("远端文件不存在。");toast("远端文件不存在");return}
+    var rs=normState(JSON.parse(rem.text),state);
+    var lj=JSON.stringify(state),rj=JSON.stringify(rs);
+    if(opts.auto&&ghCfg.dirty&&lj!==rj){updGHSt("远端有更新但本地也有修改，请手动处理。");return}
+    if(lj!==rj&&opts.ask!==false&&!confirm("远端数据将替换本地，继续？")){updGHSt("已取消。");return}
+    state=rs;ghCfg.sha=rem.sha;ghCfg.lastSync=new Date().toISOString();ghCfg.dirty=false;
+    saveGH();saveState({gh:false});renderAll();popInfo();updGHSt("已拉取最新数据。");if(!opts.auto)toast("已拉取");
+  }).catch(function(e){console.error(e);updGHSt(e.message);toast("拉取失败")}).then(function(){setGHBusy(false)});
+}
+function ghPush(opts){
+  if(ghBusy)return;opts=opts||{};if(!opts.auto)readGH();
+  if(!ghOk()){updGHSt("请先填写完整配置。");toast("配置不完整");return}
+  setGHBusy(true);updGHSt("正在读取远端...");
+  ghRead().then(function(rem){
+    var ct=JSON.stringify(state,null,2);
+    var changed=rem&&ghCfg.sha&&rem.sha!==ghCfg.sha;
+    var first=rem&&!ghCfg.sha&&rem.text.trim()!==ct.trim();
+    if(changed||first){
+      if(opts.auto){updGHSt("远端已变化，自动推送暂停。");return}
+      if(!confirm("远端已更新，继续推送会覆盖。仍推送？")){updGHSt("已取消。");return}
+    }
+    if(rem&&rem.text.trim()===ct.trim()){
+      ghCfg.sha=rem.sha;ghCfg.lastSync=new Date().toISOString();ghCfg.dirty=false;saveGH();updGHSt("已是最新。");if(!opts.auto)toast("已是最新");return;
+    }
+    return ghWrite(ct,rem?rem.sha:"").then(function(res){
+      ghCfg.sha=(res.content||{}).sha||"";ghCfg.lastSync=new Date().toISOString();ghCfg.dirty=false;saveGH();
+      updGHSt("已推送。");toast(opts.auto?"已自动推送":"已推送");
+    });
+  }).catch(function(e){console.error(e);updGHSt(e.message);toast("推送失败")}).then(function(){setGHBusy(false)});
+}
+
+function initGH(){
+  popGH();updGHSt();
+  ["ghOwner","ghRepo","ghBranch","ghPath","ghToken","ghAutoPull","ghAutoPush"].forEach(function(id){
+    var el=$("#"+id);if(el)el.addEventListener("change",function(){readGH();if(ghCfg.dirty)schedAuto()});
+  });
+  $("#ghSaveBtn").addEventListener("click",function(){readGH();toast("配置已保存");if(ghOk()&&ghCfg.autoPull)setTimeout(function(){ghPull({auto:true,ask:false})},100);if(ghCfg.dirty)schedAuto()});
+  $("#ghPullBtn").addEventListener("click",function(){ghPull()});
+  $("#ghPushBtn").addEventListener("click",function(){ghPush()});
+  $("#ghClearBtn").addEventListener("click",function(){
+    if(!confirm("确认清除 GitHub 配置？"))return;clearTimeout(ghTimer);
+    ghCfg=clone(DEFAULT_GH);localStorage.removeItem(GH_CFG_KEY);popGH();updGHSt("已清除。");toast("已清除");
+  });
+  if(ghOk()&&ghCfg.autoPull)setTimeout(function(){ghPull({auto:true,ask:false})},500);
+}
+
+function loadBundled(){
+  if(HAD_STATE||ghOk(false))return;
+  fetch(LOCAL_PATH,{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){
+    state=normState(j,state);saveState({gh:false});renderAll();
+  }).catch(function(){});
+}
+
+/* ============================== Countdown ============================== */
+function getDL(){var v=state.project&&state.project.deadline;if(!v)return null;var d=new Date(v);return isNaN(d.getTime())?null:d}
+function updCD(){
+  var dl=getDL();
+  if(!dl){$("#cDays").textContent="--";$("#cHours").textContent="--";$("#cMinutes").textContent="--";$("#cSeconds").textContent="--";var b=$("#deadlineState");b.textContent="未设置";b.className="badge medium";return}
+  var diff=dl-new Date(),rem=Math.max(0,diff);
+  $("#cDays").textContent=Math.floor(rem/864e5);
+  $("#cHours").textContent=String(Math.floor(rem%864e5/36e5)).padStart(2,"0");
+  $("#cMinutes").textContent=String(Math.floor(rem%36e5/6e4)).padStart(2,"0");
+  $("#cSeconds").textContent=String(Math.floor(rem%6e4/1e3)).padStart(2,"0");
+  var b=$("#deadlineState");
+  if(diff<=0){b.textContent="已过期";b.className="badge high"}
+  else if(Math.floor(rem/864e5)<=3){b.textContent="高风险";b.className="badge high"}
+  else if(Math.floor(rem/864e5)<=7){b.textContent="收尾期";b.className="badge medium"}
+  else{b.textContent="进行中";b.className="badge low"}
+}
+
+/* ============================== Render ============================== */
+function renderProject(){
+  var p=state.project||{};
+  document.title="进度";
+  $("#projectTitle").textContent="进度";
+  var sub=p.subtitle||"";
+  if(p.thesisTitle)sub=p.thesisTitle;
+  if(p.author||p.advisor){
+    var parts=[];if(p.author)parts.push(p.author);if(p.advisor)parts.push("导师: "+p.advisor);
+    sub+=(sub?"\n":"")+parts.join(" | ");
+  }
+  $("#projectSubtitle").textContent=sub;
+  $("#deadlineLabel").textContent=p.deadlineLabel||"未设置截止时间";
+  $("#deadlineMeta").textContent=p.deadlineMeta||"";
+}
+
+function renderOverview(){
+  var chs=state.chapters||[];
+  var total=chs.length,fin=chs.filter(function(c){return c.status==="final"}).length;
+  var tw=chs.reduce(function(s,c){return s+(c.currentWords||0)},0);
+  var tt=chs.reduce(function(s,c){return s+(c.targetWords||0)},0);
+  var pct=tt>0?Math.round(tw/tt*100):0;
+  $("#metricCh").textContent=total;
+  $("#metricFinal").textContent=fin;
+  $("#metricWords").textContent=tw.toLocaleString();
+  $("#metricPct").textContent=pct+"%";
+
+  var sorted=chs.slice().sort(function(a,b){return(a.order||0)-(b.order||0)});
+  $("#cpList").innerHTML=sorted.map(function(ch){
+    var p=ch.targetWords>0?Math.min(100,Math.round((ch.currentWords||0)/ch.targetWords*100)):0;
+    return '<div class="chapter-progress-item" data-jump="'+esc(ch.id)+'">'
+      +'<div class="chapter-progress-header"><strong>'+esc(ch.title)+'</strong><span class="badge '+badgeCls(ch.status)+'">'+esc(statusL(CH_STATUS,ch.status))+'</span></div>'
+      +'<div class="chapter-progress-bar"><span style="width:'+p+'%"></span></div>'
+      +'<div class="chapter-progress-meta"><span>'+(ch.currentWords||0)+' / '+(ch.targetWords||0)+' 字</span><span>'+p+'%</span></div></div>';
+  }).join("");
+
+  $("#msList").innerHTML='<h3 style="margin-top:8px;color:var(--muted)">关键里程碑</h3>'
+    +(state.milestones||[]).map(function(m){
+      return '<div class="milestone-item"><div class="milestone-dot '+(m.status==="done"?"done":m.status==="doing"?"doing":"")+'"></div>'
+        +'<div><strong>'+esc(m.title)+'</strong><div style="margin-top:2px"><select data-ms="'+esc(m.id)+'" data-mf="status" style="min-height:26px;padding:0 6px;font-size:12px;border-radius:999px;cursor:pointer;width:auto">'
+        +optHtml(MS_STATUS,m.status)+'</select></div></div>'
+        +'<div><input type="date" value="'+esc(m.date||"")+'" data-ms="'+esc(m.id)+'" data-mf="date" style="min-height:28px;font-size:12px;padding:2px 6px;width:140px"></div></div>';
+    }).join("");
+
+  $$("[data-ms]").forEach(function(el){
+    el.addEventListener("change",function(){
+      var ms=(state.milestones||[]).find(function(m){return m.id===el.dataset.ms});
+      if(!ms)return;ms[el.dataset.mf]=el.value;saveState();renderOverview();renderCal("overviewCal");renderCal("calView");
+    });
+  });
+  $$("[data-jump]").forEach(function(el){
+    el.addEventListener("click",function(){
+      activateView("chapters");chF={search:"",status:"All"};
+      $("#chSearch").value="";$("#chStatusFilter").value="All";renderChapters();
+      requestAnimationFrame(function(){
+        var c=document.querySelector('.chapter-card[data-cid="'+el.dataset.jump+'"]');
+        if(c){c.scrollIntoView({behavior:"smooth",block:"start"});c.classList.add("jump-highlight");setTimeout(function(){c.classList.remove("jump-highlight")},1800)}
+      });
+    });
+  });
+  renderCal("overviewCal");
+}
+
+function renderCal(cid){
+  var el=$("#"+cid);if(!el)return;
+  var today=startDay(new Date()),dl=getDL(),dlDay=dl?startDay(dl):today;
+  var calEnd=dl&&dlDay>today?dlDay:addDays(today,28);
+  var cStart=monday(today),cEnd=sunday(calEnd);
+  var rem=dl?Math.max(0,Math.ceil((dl-new Date())/864e5)):null;
+  var badge=cid==="overviewCal"?$("#overviewRemain"):$("#calRemain");
+  if(badge)badge.textContent=dl?(rem?rem+" 天":"已到截止"):"未设置截止";
+
+  var msMap={};(state.milestones||[]).forEach(function(m){if(m.date){if(!msMap[m.date])msMap[m.date]=[];msMap[m.date].push(m.title)}});
+
+  var days=[];for(var d=cStart;d<=cEnd;d=addDays(d,1))days.push(new Date(d));
+  var wk=["周一","周二","周三","周四","周五","周六","周日"];
+  var slots=[{id:"early",l:"早"},{id:"noon",l:"中"},{id:"late",l:"晚"}];
+
+  var cells=days.map(function(day){
+    var k=dayKey(day),past=day<today,isT=sameDay(day,today),isD=dl&&sameDay(day,dlDay);
+    var marks="";var ma=[];
+    if(isT)ma.push('<span class="calendar-mark today">今天</span>');
+    (msMap[k]||[]).forEach(function(t){ma.push('<span class="calendar-mark milestone">'+esc(t)+'</span>')});
+    if(isD)ma.push('<span class="calendar-mark deadline">截止</span>');
+    if(ma.length)marks='<div class="calendar-marks">'+ma.join("")+'</div>';
+
+    var sh=slots.map(function(sl){
+      var sk=k+"@"+sl.id;var n=state.calendarNotes&&state.calendarNotes.hasOwnProperty(sk)?state.calendarNotes[sk]:"";
+      return '<div class="calendar-slot"><span class="calendar-slot-label">'+sl.l+'</span>'
+        +'<div class="calendar-note" contenteditable="true" data-cd="'+esc(sk)+'">'+esc(n)+'</div></div>';
+    }).join("");
+
+    return '<div class="calendar-day'+(past?" past":"")+(isT?" today":"")+(isD?" deadline":"")+'">'
+      +'<div class="calendar-date"><span>'+day.getDate()+'</span><small>'+(day.getMonth()+1)+'月</small></div>'
+      +marks+'<div class="calendar-slots">'+sh+'</div></div>';
+  }).join("");
+
+  el.innerHTML='<div class="remaining-calendar"><div class="calendar-weekdays">'+wk.map(function(d){return'<span>'+d+'</span>'}).join("")+'</div><div class="calendar-grid">'+cells+'</div></div>';
+
+  el.querySelectorAll(".calendar-day").forEach(function(day){
+    day.addEventListener("click",function(e){
+      if(e.target.closest(".calendar-note"))return;
+      var n=(e.target.closest(".calendar-slot")||day).querySelector(".calendar-note");if(n)n.focus();
+    });
+  });
+  el.querySelectorAll("[data-cd]").forEach(function(c){
+    c.addEventListener("input",function(){
+      var k=c.dataset.cd,v=c.innerText.trim();
+      if(!state.calendarNotes)state.calendarNotes={};
+      if(v)state.calendarNotes[k]=v;else delete state.calendarNotes[k];
+      saveState();
+    });
+  });
+}
+
+/* -- Chapters -- */
+function renderChapters(){
+  var chs=(state.chapters||[]).filter(function(ch){
+    var hay=[ch.title,ch.notes].concat((ch.sections||[]).map(function(s){return s.title+" "+s.notes})).join(" ").toLowerCase();
+    return(!chF.search||hay.indexOf(chF.search.toLowerCase())>=0)&&(chF.status==="All"||ch.status===chF.status);
+  }).sort(function(a,b){return(a.order||0)-(b.order||0)});
+
+  var el=$("#chList");
+  el.innerHTML=chs.length?chs.map(chCard).join(""):'<div class="empty">没有匹配的章节。</div>';
+  bindCh();
+}
+
+function chCard(ch){
+  var p=ch.targetWords>0?Math.min(100,Math.round((ch.currentWords||0)/ch.targetWords*100)):0;
+  var secH=(ch.sections||[]).map(function(s){
+    return '<div class="section-item" data-sid="'+esc(s.id)+'">'
+      +'<input type="text" value="'+esc(s.title)+'" data-sf="title" placeholder="小节标题">'
+      +'<select data-sf="status">'+optHtml(SEC_STATUS,s.status)+'</select>'
+      +'<button class="danger" data-delsec="'+esc(s.id)+'" title="删除"><svg class="icon" viewBox="0 0 24 24"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg></button></div>';
+  }).join("");
+
+  return '<article class="chapter-card" data-cid="'+esc(ch.id)+'">'
+    +'<div class="chapter-main"><div>'
+    +'<div class="chapter-title-row"><input class="chapter-title-input" type="text" value="'+esc(ch.title)+'" data-cf="title"><span class="badge '+badgeCls(ch.status)+'">'+esc(statusL(CH_STATUS,ch.status))+'</span></div>'
+    +'<div class="chapter-progress-bar" style="margin-bottom:8px"><span style="width:'+p+'%"></span></div>'
+    +'<div class="chapter-progress-meta" style="margin-bottom:10px"><span>'+(ch.currentWords||0)+' / '+(ch.targetWords||0)+' 字</span><span>'+p+'%</span></div>'
+    +'<label><span class="field-label">写作思路 / 备注</span><textarea data-cf="notes" placeholder="记录这一章的写作思路...">'+esc(ch.notes||"")+'</textarea></label>'
+    +'</div><div class="chapter-side">'
+    +'<div class="chapter-words-row"><label><span class="field-label">当前字数</span><input type="number" min="0" value="'+(ch.currentWords||0)+'" data-cf="currentWords"></label>'
+    +'<label><span class="field-label">目标字数</span><input type="number" min="0" value="'+(ch.targetWords||0)+'" data-cf="targetWords"></label></div>'
+    +'<label><span class="field-label">状态</span><select data-cf="status">'+optHtml(CH_STATUS,ch.status)+'</select></label>'
+    +'<label><span class="field-label">排序</span><input type="number" min="1" value="'+(ch.order||1)+'" data-cf="order"></label>'
+    +'<button class="danger" data-delch="'+esc(ch.id)+'"><svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 16h10l1-16"/></svg> 删除章节</button>'
+    +'</div></div>'
+    +'<div class="section-list"><div class="section-list-header"><h3>小节 ('+(ch.sections||[]).length+')</h3>'
+    +'<button data-addsec="'+esc(ch.id)+'"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg> 添加小节</button></div>'
+    +(secH||'<div style="color:var(--muted);font-size:13px">暂无小节</div>')
+    +'</div></article>';
+}
+
+function bindCh(){
+  $$(".chapter-card [data-cf]").forEach(function(el){
+    el.addEventListener("change",function(){
+      var card=el.closest(".chapter-card"),ch=state.chapters.find(function(c){return c.id===card.dataset.cid});if(!ch)return;
+      var f=el.dataset.cf;
+      if(f==="currentWords"||f==="targetWords"||f==="order")ch[f]=parseInt(el.value)||0;else ch[f]=el.value;
+      saveState();if(f!=="notes"){renderOverview();renderChapters()}
+    });
+  });
+  $$(".section-item [data-sf]").forEach(function(el){
+    el.addEventListener("change",function(){
+      var si=el.closest(".section-item"),card=el.closest(".chapter-card");
+      var ch=state.chapters.find(function(c){return c.id===card.dataset.cid});if(!ch)return;
+      var sec=(ch.sections||[]).find(function(s){return s.id===si.dataset.sid});if(!sec)return;
+      sec[el.dataset.sf]=el.value;saveState();renderChapters();
+    });
+  });
+  $$("[data-delsec]").forEach(function(btn){
+    btn.addEventListener("click",function(){
+      var card=btn.closest(".chapter-card"),ch=state.chapters.find(function(c){return c.id===card.dataset.cid});if(!ch)return;
+      ch.sections=(ch.sections||[]).filter(function(s){return s.id!==btn.dataset.delsec});saveState();renderChapters();
+    });
+  });
+  $$("[data-addsec]").forEach(function(btn){
+    btn.addEventListener("click",function(){
+      var ch=state.chapters.find(function(c){return c.id===btn.dataset.addsec});if(!ch)return;
+      var t=prompt("小节标题:","");if(t===null)return;
+      if(!ch.sections)ch.sections=[];
+      ch.sections.push({id:"s"+Date.now(),title:t.trim()||"新小节",status:"todo",notes:""});
+      saveState();renderChapters();toast("已添加小节");
+    });
+  });
+  $$("[data-delch]").forEach(function(btn){
+    btn.addEventListener("click",function(){
+      if(!confirm("确认删除此章节？"))return;
+      state.chapters=state.chapters.filter(function(c){return c.id!==btn.dataset.delch});
+      saveState();renderOverview();renderChapters();toast("章节已删除");
+    });
+  });
+}
+
+/* -- Feedback -- */
+function chOpts(){return[{v:"All",l:"全部"}].concat(state.chapters.map(function(c){return{v:c.id,l:c.title}}))}
+function chSelOpts(){return[{v:"",l:"不关联"}].concat(state.chapters.map(function(c){return{v:c.id,l:c.title}}))}
+function chTitle(id){var c=state.chapters.find(function(x){return x.id===id});return c?c.title:(id||"未关联")}
+
+function renderFB(){
+  fillSel($("#fbChFilter"),chOpts(),fbF.chapter);
+  fillSel($("#fbChSel"),chSelOpts(),"");
+  var fbs=(state.feedback||[]).filter(function(fb){
+    var hay=[fb.content,fb.response,chTitle(fb.chapter)].join(" ").toLowerCase();
+    return(!fbF.search||hay.indexOf(fbF.search.toLowerCase())>=0)&&(fbF.chapter==="All"||fb.chapter===fbF.chapter)&&(fbF.status==="All"||fb.status===fbF.status);
+  }).sort(function(a,b){return new Date(b.date||0)-new Date(a.date||0)});
+
+  var done=(state.feedback||[]).filter(function(f){return f.status==="done"}).length;
+  $("#fbStats").textContent="已解决 "+done+" / "+(state.feedback||[]).length;
+  var el=$("#fbList");
+  el.innerHTML=fbs.length?fbs.map(fbCard).join(""):'<div class="empty">没有反馈记录。</div>';
+  bindFB();
+}
+
+function fbCard(fb){
+  return '<article class="feedback-card" data-fid="'+esc(fb.id)+'">'
+    +'<div class="feedback-header"><span class="badge">'+esc(fb.date||"未设日期")+'</span>'
+    +'<span class="badge">第 '+(fb.round||1)+' 轮</span>'
+    +'<span class="badge low">'+esc(chTitle(fb.chapter))+'</span>'
+    +'<select data-ff="status" style="min-height:24px;padding:0 6px;font-size:12px;border-radius:999px;cursor:pointer;width:auto;border:1px solid var(--line)">'+optHtml(FB_STATUS,fb.status)+'</select></div>'
+    +'<div class="feedback-body"><div><span class="field-label">导师意见</span><div class="feedback-text">'+esc(fb.content||"暂无内容")+'</div></div>'
+    +'<div class="feedback-response-block"><span class="field-label"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg> 处理方案</span>'
+    +'<textarea data-ff="response" placeholder="处理方案...">'+esc(fb.response||"")+'</textarea></div></div>'
+    +'<div class="feedback-actions"><button class="danger" data-delfb="'+esc(fb.id)+'"><svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 16h10l1-16"/></svg> 删除</button></div></article>';
+}
+
+function bindFB(){
+  $$(".feedback-card [data-ff]").forEach(function(el){
+    el.addEventListener("change",function(){
+      var card=el.closest(".feedback-card"),fb=state.feedback.find(function(f){return f.id===card.dataset.fid});if(!fb)return;
+      fb[el.dataset.ff]=el.value;saveState();if(el.dataset.ff!=="response")renderFB();
+    });
+  });
+  $$("[data-delfb]").forEach(function(btn){
+    btn.addEventListener("click",function(){
+      if(!confirm("确认删除？"))return;
+      state.feedback=state.feedback.filter(function(f){return f.id!==btn.dataset.delfb});saveState();renderFB();toast("已删除");
+    });
+  });
+}
+
+/* -- Logs -- */
+function renderLogs(){
+  var list=(state.logs||[]).slice().sort(function(a,b){return new Date(b.time)-new Date(a.time)});
+  var el=$("#logList");
+  el.innerHTML=list.length?list.map(function(log){
+    return '<article class="log-entry"><div><time>'+esc(new Date(log.time).toLocaleString("zh-CN"))+" · "+esc(log.category)+'</time><p>'+esc(log.text)+'</p></div>'
+      +'<button class="danger" data-dellog="'+esc(log.id)+'" title="删除"><svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 16h10l1-16"/></svg></button></article>';
+  }).join(""):'<div class="empty">还没有日志记录。</div>';
+  $$("[data-dellog]").forEach(function(btn){
+    btn.addEventListener("click",function(){
+      state.logs=state.logs.filter(function(l){return l.id!==btn.dataset.dellog});saveState();renderLogs();toast("已删除");
+    });
+  });
+}
+
+/* -- Storyline -- */
+function renderStoryline(){
+  if(!state.storyline)state.storyline={narrative:"",researchPoints:[],connections:""};
+  var sl=state.storyline;
+  $("#slNarrative").value=sl.narrative||"";
+  $("#slConnections").value=sl.connections||"";
+  var rps=sl.researchPoints||[];
+  $("#rpCount").textContent=rps.length+" 个研究点";
+
+  var flow=$("#rpFlow");
+  if(rps.length>=2){
+    flow.style.display="flex";
+    flow.innerHTML=rps.map(function(rp,i){
+      var node='<div class="rp-flow-node">'+esc(rp.title||"研究点"+(i+1))+'</div>';
+      if(i<rps.length-1)node+='<div class="rp-flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg></div>';
+      return node;
+    }).join("");
+  }else{flow.style.display="none"}
+
+  var grid=$("#rpGrid");
+  grid.innerHTML=rps.length?rps.map(function(rp,i){
+    return '<article class="rp-card" data-rpid="'+esc(rp.id)+'">'
+      +'<div class="rp-card-head"><span class="rp-number">'+(i+1)+'</span>'
+      +'<input type="text" value="'+esc(rp.title)+'" data-rpf="title" placeholder="研究点名称"></div>'
+      +'<div class="rp-card-body">'
+      +'<label><span class="field-label">解决什么问题</span><textarea data-rpf="problem" placeholder="这个研究点要解决的核心问题是什么？">'+esc(rp.problem||"")+'</textarea></label>'
+      +'<label><span class="field-label">方法 / 思路</span><textarea data-rpf="method" placeholder="用什么方法或思路来解决？">'+esc(rp.method||"")+'</textarea></label>'
+      +'<label><span class="field-label">预期贡献</span><textarea data-rpf="contribution" placeholder="这个点的创新或贡献在哪里？">'+esc(rp.contribution||"")+'</textarea></label>'
+      +'</div>'
+      +'<div class="rp-card-foot">'
+      +'<select class="rp-status-sel" data-rpf="status">'+optHtml(RP_STATUS,rp.status)+'</select>'
+      +'<button class="danger" data-delrp="'+esc(rp.id)+'" style="min-height:28px;padding:0 8px;font-size:12px"><svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 16h10l1-16"/></svg> 删除</button>'
+      +'</div></article>';
+  }).join(""):'<div class="empty">还没有研究点，点击上方「添加研究点」开始构思。</div>';
+
+  bindStoryline();
+}
+
+function bindStoryline(){
+  var saving=null;
+  function debounceSave(){clearTimeout(saving);saving=setTimeout(function(){saveState()},400)}
+  $("#slNarrative").onchange=function(){state.storyline.narrative=this.value;saveState()};
+  $("#slNarrative").oninput=function(){state.storyline.narrative=this.value;debounceSave()};
+  $("#slConnections").onchange=function(){state.storyline.connections=this.value;saveState()};
+  $("#slConnections").oninput=function(){state.storyline.connections=this.value;debounceSave()};
+
+  $$(".rp-card [data-rpf]").forEach(function(el){
+    var handler=function(){
+      var card=el.closest(".rp-card"),rp=(state.storyline.researchPoints||[]).find(function(r){return r.id===card.dataset.rpid});
+      if(!rp)return;rp[el.dataset.rpf]=el.tagName==="SELECT"?el.value:el.value;
+    };
+    el.addEventListener("change",function(){handler();saveState();if(el.dataset.rpf==="title"||el.dataset.rpf==="status")renderStoryline()});
+    if(el.tagName==="TEXTAREA")el.addEventListener("input",function(){handler();debounceSave()});
+  });
+
+  $$("[data-delrp]").forEach(function(btn){
+    btn.addEventListener("click",function(){
+      if(!confirm("确认删除此研究点？"))return;
+      state.storyline.researchPoints=state.storyline.researchPoints.filter(function(r){return r.id!==btn.dataset.delrp});
+      saveState();renderStoryline();toast("研究点已删除");
+    });
+  });
+}
+
+/* -- Render All -- */
+function popInfo(){
+  var p=state.project||{};
+  var el=$("#infoTitle");if(!el)return;
+  el.value=p.thesisTitle||"";
+  $("#infoAuthor").value=p.author||"";
+  $("#infoAdvisor").value=p.advisor||"";
+  $("#infoDeadline").value=p.deadline?p.deadline.slice(0,10):"";
+  $$("#infoDegreeGroup .radio-card").forEach(function(c){c.classList.toggle("selected",c.dataset.value===(p.degree||"master"))});
+}
+function renderAll(){renderProject();renderOverview();renderStoryline();renderChapters();renderFB();renderCal("calView");renderLogs();updSnap()}
+function activateView(v){$$(".tab-button").forEach(function(b){b.classList.toggle("active",b.dataset.view===v)});$$(".view").forEach(function(el){el.classList.toggle("active",el.id===v)})}
+
+/* ============================== Setup Wizard ============================== */
+function wizDefNames(deg,n){
+  var base=deg==="phd"?PHD_CHAPTERS:MASTER_CHAPTERS;
+  if(n===base.length)return base.slice();
+  var result=[];
+  for(var i=0;i<n;i++){
+    if(i===0)result.push("第"+(i+1)+"章 绪论");
+    else if(i===n-1)result.push("第"+(i+1)+"章 总结与展望");
+    else result.push("第"+(i+1)+"章 ");
+  }
+  return result;
+}
+
+function initWizard(){
+  if(HAD_STATE){$("#wizardOverlay").classList.add("hidden");return}
+  $("#wizardOverlay").classList.remove("hidden");
+
+  var deg="master";
+  var countEl=$("#wizChapterCount"),namesEl=$("#wizChapterNames");
+
+  function updNames(){
+    var n=parseInt(countEl.value)||6;
+    namesEl.value=wizDefNames(deg,n).join("\n");
+  }
+  updNames();
+
+  $$("#wizDegreeGroup .radio-card").forEach(function(card){
+    card.addEventListener("click",function(){
+      $$("#wizDegreeGroup .radio-card").forEach(function(c){c.classList.remove("selected")});
+      card.classList.add("selected");deg=card.dataset.value;
+      countEl.value=deg==="phd"?9:6;updNames();
+    });
+  });
+  countEl.addEventListener("input",updNames);
+
+  function applyWiz(){
+    var names=namesEl.value.split("\n").map(function(s){return s.trim()}).filter(Boolean);
+    if(!names.length)names=wizDefNames(deg,parseInt(countEl.value)||6);
+    var ms=clone(deg==="phd"?PHD_MILESTONES:MASTER_MILESTONES);
+    var dlVal=$("#wizDeadline").value;
+    var title="进度";
+    var thTitle=$("#wizTitle").value.trim();
+    var author=$("#wizAuthor").value.trim();
+    var advisor=$("#wizAdvisor").value.trim();
+
+    state={
+      project:{title:title,subtitle:"论文撰写进度、导师反馈与章节管理工具",deadline:dlVal?dlVal+"T23:59:00":"",
+        deadlineLabel:dlVal?"截止: "+dlVal:"未设置截止时间",deadlineMeta:dlVal?"":"在数据中设置 deadline 后显示倒计时。",
+        thesisTitle:thTitle,author:author,advisor:advisor,degree:deg},
+      chapters:makeChapters(names),milestones:ms,storyline:{narrative:"",researchPoints:[],connections:""},feedback:[],logs:[],calendarNotes:{},ui:{notesExpanded:false}
+    };
+    saveState();renderAll();updCD();
+    $("#wizardOverlay").classList.add("hidden");
+    toast("已创建，开始写论文吧！");
+  }
+
+  $("#wizStartBtn").addEventListener("click",applyWiz);
+  $("#wizSkipBtn").addEventListener("click",function(){
+    state=defaultState(deg);saveState();renderAll();updCD();
+    $("#wizardOverlay").classList.add("hidden");toast("已使用默认配置");
+  });
+}
+
+/* ============================== Init ============================== */
+function initControls(){
+  $("#logTime").value=nowLocal();
+  $("#fbDate").value=dayKey(new Date());
+
+  $$(".tab-button").forEach(function(b){b.addEventListener("click",function(){activateView(b.dataset.view)})});
+  $("#chSearch").addEventListener("input",function(e){chF.search=e.target.value;renderChapters()});
+  $("#chStatusFilter").addEventListener("change",function(e){chF.status=e.target.value;renderChapters()});
+  $("#addChapterBtn").addEventListener("click",function(){
+    var t=prompt("章节标题:","第"+(state.chapters.length+1)+"章 ");if(t===null)return;
+    var mx=Math.max.apply(null,[0].concat(state.chapters.map(function(c){return c.order||0})));
+    state.chapters.push({id:"ch"+Date.now(),title:t.trim()||"新章节",order:mx+1,targetWords:8000,currentWords:0,status:"todo",sections:[],notes:""});
+    saveState();renderOverview();renderChapters();toast("已添加章节");
+  });
+  $("#addRpBtn").addEventListener("click",function(){
+    if(!state.storyline)state.storyline={narrative:"",researchPoints:[],connections:""};
+    var rps=state.storyline.researchPoints;
+    var n=rps.length+1;
+    rps.push({id:"rp"+Date.now(),title:"研究点"+n,problem:"",method:"",contribution:"",status:"idea"});
+    saveState();renderStoryline();toast("已添加研究点"+n);
+  });
+  $("#fbSearch").addEventListener("input",function(e){fbF.search=e.target.value;renderFB()});
+  $("#fbChFilter").addEventListener("change",function(e){fbF.chapter=e.target.value;renderFB()});
+  $("#fbStFilter").addEventListener("change",function(e){fbF.status=e.target.value;renderFB()});
+  $("#addFbBtn").addEventListener("click",function(){
+    var ct=$("#fbContent").value.trim();if(!ct){toast("请填写意见内容");return}
+    state.feedback.push({id:"fb"+Date.now(),date:$("#fbDate").value,round:parseInt($("#fbRound").value)||1,chapter:$("#fbChSel").value,content:ct,response:$("#fbResponse").value.trim(),status:$("#fbNewSt").value});
+    $("#fbContent").value="";$("#fbResponse").value="";saveState();renderFB();toast("已添加反馈");
+  });
+  $("#addLogBtn").addEventListener("click",function(){
+    var t=$("#logText").value.trim();if(!t){toast("请填写内容");return}
+    state.logs.push({id:"l"+Date.now(),time:$("#logTime").value?new Date($("#logTime").value).toISOString():new Date().toISOString(),category:$("#logCat").value,text:t});
+    $("#logText").value="";$("#logTime").value=nowLocal();saveState();renderLogs();toast("已保存");
+  });
+  $("#linkFileBtn").addEventListener("click",onLinkFile);
+  $("#exportBtn").addEventListener("click",function(){dl("thesis-progress.json",JSON.stringify(state,null,2),"application/json;charset=utf-8")});
+  $("#importFile").addEventListener("change",function(e){
+    var f=e.target.files[0];if(!f)return;
+    var r=new FileReader();r.onload=function(){try{state=normState(JSON.parse(r.result),state);saveState();renderAll();popInfo();toast("已导入")}catch(err){toast("JSON 格式无效")}};r.readAsText(f);
+  });
+  $("#resetBtn").addEventListener("click",function(){
+    if(!confirm("确认重置所有数据？"))return;
+    localStorage.removeItem(STORAGE_KEY);state=defaultState();renderAll();popInfo();toast("已重置");
+  });
+
+  popInfo();
+
+  var infoDeg=state.project.degree||"master";
+  $$("#infoDegreeGroup .radio-card").forEach(function(card){
+    card.addEventListener("click",function(){
+      $$("#infoDegreeGroup .radio-card").forEach(function(c){c.classList.remove("selected")});
+      card.classList.add("selected");infoDeg=card.dataset.value;
+    });
+  });
+
+  $("#infoSaveBtn").addEventListener("click",function(){
+    var p=state.project;
+    p.degree=infoDeg;
+    p.thesisTitle=$("#infoTitle").value.trim();
+    p.author=$("#infoAuthor").value.trim();
+    p.advisor=$("#infoAdvisor").value.trim();
+    var dlVal=$("#infoDeadline").value;
+    p.deadline=dlVal?dlVal+"T23:59:00":"";
+    p.deadlineLabel=dlVal?"截止: "+dlVal:"未设置截止时间";
+    p.deadlineMeta=dlVal?"":"在数据中设置 deadline 后显示倒计时。";
+    saveState();renderAll();updCD();toast("基本信息已保存");
+  });
+}
+
+/* ============================== Boot ============================== */
+initControls();
+renderAll();
+initGH();
+restoreFL();
+loadBundled();
+updCD();
+setInterval(updCD,1000);
+initWizard();
+</script>
+</body>
+</html>

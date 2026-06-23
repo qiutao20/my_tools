@@ -1,0 +1,92 @@
+{
+  "project": {
+    "title": "硕士毕业论文进度",
+    "subtitle": "论文撰写进度、导师反馈与章节管理工具",
+    "deadline": "",
+    "deadlineLabel": "未设置截止时间",
+    "deadlineMeta": "在数据 JSON 中设置 project.deadline 后显示倒计时。",
+    "thesisTitle": "",
+    "author": "",
+    "advisor": ""
+  },
+  "chapters": [
+    {
+      "id": "ch1",
+      "title": "第一章 绪论",
+      "order": 1,
+      "targetWords": 8000,
+      "currentWords": 0,
+      "status": "todo",
+      "sections": [
+        { "id": "s1-1", "title": "研究背景与意义", "status": "todo", "notes": "" },
+        { "id": "s1-2", "title": "国内外研究现状", "status": "todo", "notes": "" },
+        { "id": "s1-3", "title": "主要研究内容", "status": "todo", "notes": "" },
+        { "id": "s1-4", "title": "论文创新点", "status": "todo", "notes": "" },
+        { "id": "s1-5", "title": "论文组织结构", "status": "todo", "notes": "" }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ch2",
+      "title": "第二章 相关知识",
+      "order": 2,
+      "targetWords": 6000,
+      "currentWords": 0,
+      "status": "todo",
+      "sections": [],
+      "notes": ""
+    },
+    {
+      "id": "ch3",
+      "title": "第三章 研究点一",
+      "order": 3,
+      "targetWords": 10000,
+      "currentWords": 0,
+      "status": "todo",
+      "sections": [],
+      "notes": ""
+    },
+    {
+      "id": "ch4",
+      "title": "第四章 研究点二",
+      "order": 4,
+      "targetWords": 10000,
+      "currentWords": 0,
+      "status": "todo",
+      "sections": [],
+      "notes": ""
+    },
+    {
+      "id": "ch5",
+      "title": "第五章 研究点三",
+      "order": 5,
+      "targetWords": 10000,
+      "currentWords": 0,
+      "status": "todo",
+      "sections": [],
+      "notes": ""
+    },
+    {
+      "id": "ch6",
+      "title": "第六章 总结与展望",
+      "order": 6,
+      "targetWords": 3000,
+      "currentWords": 0,
+      "status": "todo",
+      "sections": [],
+      "notes": ""
+    }
+  ],
+  "milestones": [
+    { "id": "m1", "title": "开题报告", "date": "", "status": "done" },
+    { "id": "m2", "title": "中期检查", "date": "", "status": "todo" },
+    { "id": "m3", "title": "初稿完成", "date": "", "status": "todo" },
+    { "id": "m4", "title": "预答辩", "date": "", "status": "todo" },
+    { "id": "m5", "title": "论文送审", "date": "", "status": "todo" },
+    { "id": "m6", "title": "正式答辩", "date": "", "status": "todo" }
+  ],
+  "feedback": [],
+  "logs": [],
+  "calendarNotes": {},
+  "ui": { "notesExpanded": false }
+}
