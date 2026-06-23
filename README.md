@@ -26,28 +26,6 @@ http://127.0.0.1:4173/revise_tool/
 http://127.0.0.1:4173/thesis_tool/
 ```
 
-## GitHub Pages
 
-推荐统一发布到：
 
-```txt
-https://tools.qiutao20.online/
-https://tools.qiutao20.online/daily_program/
-https://tools.qiutao20.online/revise_tool/
-https://tools.qiutao20.online/thesis_tool/
-```
 
-Cloudflare DNS 中添加：
-
-```txt
-tools  CNAME  qiutao20.github.io
-```
-
-旧域名如果还要保留入口，建议在 Cloudflare 里做重定向：
-
-```txt
-plan.qiutao20.online   -> https://tools.qiutao20.online/daily_program/
-revise.qiutao20.online -> https://tools.qiutao20.online/revise_tool/
-```
-
-注意：浏览器 `localStorage` 按域名隔离。迁移到 `tools.qiutao20.online` 后，旧域名下的本地数据不会自动出现在新域名；`daily_program` 可以通过 GitHub 同步从 `private_data` 拉取数据。
