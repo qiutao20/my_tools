@@ -235,6 +235,15 @@
         <span class="arrow" aria-hidden="true">→</span>
       </a>
 
+      <a class="row" href="./thesis_tool/" data-id="thesis">
+        <span class="icon" aria-hidden="true">🎓</span>
+        <span class="meta">
+          <span class="name">Thesis</span>
+          <span class="desc">大论文进度控制工具</span>
+        </span>
+        <span class="arrow" aria-hidden="true">→</span>
+      </a>
+
       <a class="row" href="https://ha.qiutao20.online" data-id="home-assistant">
         <span class="icon" aria-hidden="true">🏠</span>
         <span class="meta">
@@ -297,15 +306,6 @@
         </span>
         <span class="arrow" aria-hidden="true">→</span>
       </a>
-
-      <a class="row" href="./thesis_tool/" data-id="thesis">
-        <span class="icon" aria-hidden="true">🎓</span>
-        <span class="meta">
-          <span class="name">Thesis</span>
-          <span class="desc">大论文进度控制工具</span>
-        </span>
-        <span class="arrow" aria-hidden="true">→</span>
-      </a>
     </nav>
 
     <footer>© 2026 qiutao20@github.com / qiutao20@nudt.edu.cn</footer>
@@ -313,16 +313,29 @@
   <script>
     (() => {
       const storageKey = "qiutao20.toolbox.order.v1";
-      const legacyDefaultOrder = [
-        "home-assistant",
-        "mobile-vc",
-        "revise",
-        "thesis",
-        "plan",
-        "bus-public",
-        "weread",
-        "bus-private",
-        "token-admin",
+      const defaultOrdersToIgnore = [
+        [
+          "home-assistant",
+          "mobile-vc",
+          "revise",
+          "thesis",
+          "plan",
+          "bus-public",
+          "weread",
+          "bus-private",
+          "token-admin",
+        ],
+        [
+          "plan",
+          "home-assistant",
+          "bus-public",
+          "bus-private",
+          "token-admin",
+          "mobile-vc",
+          "weread",
+          "revise",
+          "thesis",
+        ],
       ];
       const list = document.querySelector("[data-sortable-list]");
       if (!list) return;
@@ -335,7 +348,7 @@
           const parsed = JSON.parse(localStorage.getItem(storageKey) || "[]");
           if (!Array.isArray(parsed)) return [];
 
-          return ordersMatch(parsed, legacyDefaultOrder) ? [] : parsed;
+          return defaultOrdersToIgnore.some((order) => ordersMatch(parsed, order)) ? [] : parsed;
         } catch {
           return [];
         }
