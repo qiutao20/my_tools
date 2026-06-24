@@ -747,6 +747,116 @@ function saveState(opts){
   if(!opts||opts.gh!==false)markDirty();
 }
 function updSnap(){var el=$("#dataSnap");if(el)el.value=JSON.stringify(state,null,2)}
+function setField(obj,key,val){
+  if(obj[key]===val)return false;
+  obj[key]=val;
+  return true;
+}
+function syncInfoForm(){
+  var titleEl=$("#infoTitle");if(!titleEl)return false;
+  if(!state.project)state.project={};
+  var p=state.project,changed=false;
+  var degEl=$("#infoDegreeGroup .radio-card.selected");
+  var dlEl=$("#infoDeadline");
+  var dlVal=dlEl?(dlEl.value||"").trim():"";
+  changed=setField(p,"degree",degEl?degEl.dataset.value:(p.degree||"master"))||changed;
+  changed=setField(p,"thesisTitle",titleEl.value.trim())||changed;
+  changed=setField(p,"author",($("#infoAuthor").value||"").trim())||changed;
+  changed=setField(p,"advisor",($("#infoAdvisor").value||"").trim())||changed;
+  changed=setField(p,"deadline",dlVal?dlVal+"T23:59:00":"")||changed;
+  changed=setField(p,"deadlineLabel",dlVal?"截止: "+dlVal:"未设置截止时间")||changed;
+  changed=setField(p,"deadlineMeta",dlVal?"":"在数据中设置 deadline 后显示倒计时。")||changed;
+  return changed;
+}
+function syncMilestoneForms(){
+  var changed=false;
+  $$("[data-ms]").forEach(function(el){
+    var ms=(state.milestones||[]).find(function(m){return m.id===el.dataset.ms});
+    if(ms)changed=setField(ms,el.dataset.mf,el.value)||changed;
+  });
+  return changed;
+}
+function syncChapterForms(){
+  var changed=false;
+  $$(".chapter-card").forEach(function(card){
+    var ch=(state.chapters||[]).find(function(c){return c.id===card.dataset.cid});
+    if(!ch)return;
+    card.querySelectorAll("[data-cf]").forEach(function(el){
+      var f=el.dataset.cf;
+      var v=(f==="currentWords"||f==="targetWords"||f==="order")?(parseInt(el.value)||0):el.value;
+      changed=setField(ch,f,v)||changed;
+    });
+    card.querySelectorAll(".section-item").forEach(function(si){
+      var sec=(ch.sections||[]).find(function(s){return s.id===si.dataset.sid});
+      if(!sec)return;
+      si.querySelectorAll("[data-sf]").forEach(function(el){
+        changed=setField(sec,el.dataset.sf,el.value)||changed;
+      });
+    });
+  });
+  return changed;
+}
+function syncFeedbackForms(){
+  var changed=false;
+  $$(".feedback-card").forEach(function(card){
+    var fb=(state.feedback||[]).find(function(f){return f.id===card.dataset.fid});
+    if(!fb)return;
+    card.querySelectorAll("[data-ff]").forEach(function(el){
+      changed=setField(fb,el.dataset.ff,el.value)||changed;
+    });
+  });
+  return changed;
+}
+function syncStorylineForms(){
+  if(!state.storyline)state.storyline={narrative:"",researchPoints:[],connections:""};
+  var changed=false,sl=state.storyline;
+  var n=$("#slNarrative"),c=$("#slConnections");
+  if(n)changed=setField(sl,"narrative",n.value)||changed;
+  if(c)changed=setField(sl,"connections",c.value)||changed;
+  $$(".rp-card").forEach(function(card){
+    var rp=(sl.researchPoints||[]).find(function(r){return r.id===card.dataset.rpid});
+    if(!rp)return;
+    card.querySelectorAll("[data-rpf]").forEach(function(el){
+      changed=setField(rp,el.dataset.rpf,el.value)||changed;
+    });
+  });
+  return changed;
+}
+function syncCalendarForms(){
+  var changed=false;
+  if(!state.calendarNotes)state.calendarNotes={};
+  var scope=$(".view.active")||document;
+  scope.querySelectorAll("[data-cd]").forEach(function(el){
+    var k=el.dataset.cd,v=el.innerText.trim();
+    if(v)changed=setField(state.calendarNotes,k,v)||changed;
+    else if(Object.prototype.hasOwnProperty.call(state.calendarNotes,k)){delete state.calendarNotes[k];changed=true}
+  });
+  return changed;
+}
+function syncLiveForms(){
+  var changed=false;
+  changed=syncInfoForm()||changed;
+  changed=syncMilestoneForms()||changed;
+  changed=syncChapterForms()||changed;
+  changed=syncFeedbackForms()||changed;
+  changed=syncStorylineForms()||changed;
+  changed=syncCalendarForms()||changed;
+  return changed;
+}
+function persistLiveState(opts){
+  opts=opts||{};
+  var changed=syncLiveForms();
+  var json=JSON.stringify(state,null,2);
+  localStorage.setItem(STORAGE_KEY,json);
+  updSnap();
+  if(changed&&opts.githubDirty){
+    ghCfg.dirty=true;
+    saveGH();
+    updGHSt();
+  }
+  if(changed&&opts.githubAuto)markDirty();
+  return json;
+}
 
 /* -- File System Access API -- */
 var fh=null,fperm=false,fwt=null;
@@ -786,9 +896,9 @@ function updFileStatus(){
 }
 function onLinkFile(){
   if(!fsOk()){toast("浏览器不支持，请用导出 JSON");return}
-  if(fh&&!fperm){chkPerm(fh,true).then(function(ok){fperm=ok;if(ok){writeToFile(true);toast("已恢复自动保存")}updFileStatus()});return}
+  if(fh&&!fperm){chkPerm(fh,true).then(function(ok){fperm=ok;if(ok){persistLiveState({githubDirty:true});writeToFile(true);toast("已恢复自动保存")}updFileStatus()});return}
   window.showSaveFilePicker({suggestedName:"thesis-progress.json",types:[{description:"JSON",accept:{"application/json":[".json"]}}]})
-  .then(function(h){fh=h;return chkPerm(h,true).then(function(ok){fperm=ok;return idb("put",h)}).then(function(){return writeToFile(true)}).then(function(){updFileStatus();toast("已链接本地文件")})})
+  .then(function(h){fh=h;return chkPerm(h,true).then(function(ok){fperm=ok;return idb("put",h)}).then(function(){persistLiveState({githubDirty:true});return writeToFile(true)}).then(function(){updFileStatus();toast("已链接本地文件")})})
   .catch(function(e){if(e&&e.name!=="AbortError"){console.error(e);toast("链接失败")}});
 }
 function restoreFL(){
@@ -860,6 +970,7 @@ function ghWrite(ct,sha){
 function ghPull(opts){
   if(ghBusy)return;opts=opts||{};if(!opts.auto)readGH();
   if(!ghOk()){updGHSt("请先填写完整配置。");toast("配置不完整");return}
+  persistLiveState({githubDirty:true});
   setGHBusy(true);updGHSt("正在拉取...");
   ghRead().then(function(rem){
     if(!rem){updGHSt("远端文件不存在。");toast("远端文件不存在");return}
@@ -874,9 +985,9 @@ function ghPull(opts){
 function ghPush(opts){
   if(ghBusy)return;opts=opts||{};if(!opts.auto)readGH();
   if(!ghOk()){updGHSt("请先填写完整配置。");toast("配置不完整");return}
+  var ct=persistLiveState({githubDirty:true});
   setGHBusy(true);updGHSt("正在读取远端...");
   ghRead().then(function(rem){
-    var ct=JSON.stringify(state,null,2);
     var changed=rem&&ghCfg.sha&&rem.sha!==ghCfg.sha;
     var first=rem&&!ghCfg.sha&&rem.text.trim()!==ct.trim();
     if(changed||first){
@@ -911,7 +1022,7 @@ function initGH(){
 function loadBundled(){
   if(HAD_STATE||ghOk(false))return;
   fetch(LOCAL_PATH,{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){
-    state=normState(j,state);saveState({gh:false});renderAll();
+    state=normState(j,state);saveState({gh:false});renderAll();popInfo();
   }).catch(function(){});
 }
 
@@ -1088,21 +1199,36 @@ function chCard(ch){
 }
 
 function bindCh(){
+  function debouncedChapterSave(){
+    clearTimeout(bindCh._timer);
+    bindCh._timer=setTimeout(function(){saveState();renderOverview()},400);
+  }
   $$(".chapter-card [data-cf]").forEach(function(el){
-    el.addEventListener("change",function(){
-      var card=el.closest(".chapter-card"),ch=state.chapters.find(function(c){return c.id===card.dataset.cid});if(!ch)return;
+    function apply(){
+      var card=el.closest(".chapter-card"),ch=state.chapters.find(function(c){return c.id===card.dataset.cid});if(!ch)return null;
       var f=el.dataset.cf;
       if(f==="currentWords"||f==="targetWords"||f==="order")ch[f]=parseInt(el.value)||0;else ch[f]=el.value;
+      return f;
+    }
+    el.addEventListener("change",function(){
+      var f=apply();if(!f)return;
       saveState();if(f!=="notes"){renderOverview();renderChapters()}
     });
+    if(el.tagName==="INPUT"||el.tagName==="TEXTAREA"){
+      el.addEventListener("input",function(){apply();debouncedChapterSave()});
+    }
   });
   $$(".section-item [data-sf]").forEach(function(el){
-    el.addEventListener("change",function(){
+    function apply(){
       var si=el.closest(".section-item"),card=el.closest(".chapter-card");
-      var ch=state.chapters.find(function(c){return c.id===card.dataset.cid});if(!ch)return;
-      var sec=(ch.sections||[]).find(function(s){return s.id===si.dataset.sid});if(!sec)return;
-      sec[el.dataset.sf]=el.value;saveState();renderChapters();
+      var ch=state.chapters.find(function(c){return c.id===card.dataset.cid});if(!ch)return false;
+      var sec=(ch.sections||[]).find(function(s){return s.id===si.dataset.sid});if(!sec)return false;
+      sec[el.dataset.sf]=el.value;return true;
+    }
+    el.addEventListener("change",function(){
+      if(!apply())return;saveState();renderChapters();
     });
+    if(el.tagName==="INPUT")el.addEventListener("input",function(){if(apply())debouncedChapterSave()});
   });
   $$("[data-delsec]").forEach(function(btn){
     btn.addEventListener("click",function(){
@@ -1161,11 +1287,19 @@ function fbCard(fb){
 }
 
 function bindFB(){
+  function debouncedFeedbackSave(){
+    clearTimeout(bindFB._timer);
+    bindFB._timer=setTimeout(function(){saveState()},400);
+  }
   $$(".feedback-card [data-ff]").forEach(function(el){
+    function apply(){
+      var card=el.closest(".feedback-card"),fb=state.feedback.find(function(f){return f.id===card.dataset.fid});if(!fb)return false;
+      fb[el.dataset.ff]=el.value;return true;
+    }
     el.addEventListener("change",function(){
-      var card=el.closest(".feedback-card"),fb=state.feedback.find(function(f){return f.id===card.dataset.fid});if(!fb)return;
-      fb[el.dataset.ff]=el.value;saveState();if(el.dataset.ff!=="response")renderFB();
+      if(!apply())return;saveState();if(el.dataset.ff!=="response")renderFB();
     });
+    if(el.tagName==="TEXTAREA")el.addEventListener("input",function(){if(apply())debouncedFeedbackSave()});
   });
   $$("[data-delfb]").forEach(function(btn){
     btn.addEventListener("click",function(){
@@ -1318,14 +1452,14 @@ function initWizard(){
         thesisTitle:thTitle,author:author,advisor:advisor,degree:deg},
       chapters:makeChapters(names),milestones:ms,storyline:{narrative:"",researchPoints:[],connections:""},feedback:[],logs:[],calendarNotes:{},ui:{notesExpanded:false}
     };
-    saveState();renderAll();updCD();
+    renderAll();popInfo();saveState();updCD();
     $("#wizardOverlay").classList.add("hidden");
     toast("已创建，开始写论文吧！");
   }
 
   $("#wizStartBtn").addEventListener("click",applyWiz);
   $("#wizSkipBtn").addEventListener("click",function(){
-    state=defaultState(deg);saveState();renderAll();updCD();
+    state=defaultState(deg);renderAll();popInfo();saveState();updCD();
     $("#wizardOverlay").classList.add("hidden");toast("已使用默认配置");
   });
 }
@@ -1365,7 +1499,7 @@ function initControls(){
     $("#logText").value="";$("#logTime").value=nowLocal();saveState();renderLogs();toast("已保存");
   });
   $("#linkFileBtn").addEventListener("click",onLinkFile);
-  $("#exportBtn").addEventListener("click",function(){dl("thesis-progress.json",JSON.stringify(state,null,2),"application/json;charset=utf-8")});
+  $("#exportBtn").addEventListener("click",function(){dl("thesis-progress.json",persistLiveState({githubAuto:true}),"application/json;charset=utf-8")});
   $("#importFile").addEventListener("change",function(e){
     var f=e.target.files[0];if(!f)return;
     var r=new FileReader();r.onload=function(){try{state=normState(JSON.parse(r.result),state);saveState();renderAll();popInfo();toast("已导入")}catch(err){toast("JSON 格式无效")}};r.readAsText(f);
@@ -1377,25 +1511,37 @@ function initControls(){
 
   popInfo();
 
-  var infoDeg=state.project.degree||"master";
+  var infoTimer=null;
+  function saveInfoDraft(renderNow){
+    clearTimeout(infoTimer);
+    if(!syncInfoForm()&&!renderNow)return;
+    saveState();
+    if(renderNow){
+      renderAll();popInfo();updCD();
+    }else{
+      renderProject();updCD();updSnap();
+    }
+  }
+  function scheduleInfoDraft(){
+    clearTimeout(infoTimer);
+    infoTimer=setTimeout(function(){saveInfoDraft(false)},400);
+  }
   $$("#infoDegreeGroup .radio-card").forEach(function(card){
     card.addEventListener("click",function(){
       $$("#infoDegreeGroup .radio-card").forEach(function(c){c.classList.remove("selected")});
-      card.classList.add("selected");infoDeg=card.dataset.value;
+      card.classList.add("selected");
+      saveInfoDraft(false);
     });
   });
+  ["infoTitle","infoAuthor","infoAdvisor"].forEach(function(id){
+    var el=$("#"+id);if(!el)return;
+    el.addEventListener("input",scheduleInfoDraft);
+    el.addEventListener("change",function(){saveInfoDraft(false)});
+  });
+  $("#infoDeadline").addEventListener("change",function(){saveInfoDraft(true)});
 
   $("#infoSaveBtn").addEventListener("click",function(){
-    var p=state.project;
-    p.degree=infoDeg;
-    p.thesisTitle=$("#infoTitle").value.trim();
-    p.author=$("#infoAuthor").value.trim();
-    p.advisor=$("#infoAdvisor").value.trim();
-    var dlVal=$("#infoDeadline").value;
-    p.deadline=dlVal?dlVal+"T23:59:00":"";
-    p.deadlineLabel=dlVal?"截止: "+dlVal:"未设置截止时间";
-    p.deadlineMeta=dlVal?"":"在数据中设置 deadline 后显示倒计时。";
-    saveState();renderAll();updCD();toast("基本信息已保存");
+    saveInfoDraft(true);toast("基本信息已保存");
   });
 }
 
