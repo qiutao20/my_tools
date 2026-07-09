@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>每周计划</title>
-    <link rel="stylesheet" href="styles.css?v=20260622-1" />
+    <title>周期计划</title>
+    <link rel="stylesheet" href="styles.css?v=20260709-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -17,26 +17,45 @@
             </svg>
           </div>
           <div>
-            <h1>每周计划</h1>
-            <p id="weekRange">本周</p>
+            <h1>周期计划</h1>
+            <p id="weekRange">当前周期</p>
           </div>
         </div>
 
-        <nav class="week-nav" aria-label="周切换">
-          <button class="icon-button" id="prevWeek" type="button" aria-label="上一周" title="上一周">
+        <nav class="week-nav" aria-label="周期切换">
+          <button class="icon-button" id="prevWeek" type="button" aria-label="上一周期" title="上一周期">
             <svg viewBox="0 0 24 24" focusable="false"><path d="m15 18-6-6 6-6" /></svg>
           </button>
-          <button class="today-button" id="currentWeek" type="button">回到本周</button>
-          <button class="icon-button" id="nextWeek" type="button" aria-label="下一周" title="下一周">
+          <button class="today-button" id="currentWeek" type="button">从今天开始</button>
+          <button class="icon-button" id="nextWeek" type="button" aria-label="下一周期" title="下一周期">
             <svg viewBox="0 0 24 24" focusable="false"><path d="m9 18 6-6-6-6" /></svg>
           </button>
         </nav>
 
+        <form id="planRangeForm" class="plan-range-form" aria-label="计划周期设置">
+          <label>
+            <span>开始</span>
+            <input id="planStart" type="date" />
+          </label>
+          <label>
+            <span>结束</span>
+            <input id="planEnd" type="date" />
+          </label>
+          <button class="ghost-button" id="planApplyRange" type="submit">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+              <path d="M17 21v-8H7v8" />
+              <path d="M7 3v5h8" />
+            </svg>
+            应用
+          </button>
+        </form>
+
         <details id="focusPanel" class="panel compact-panel" aria-labelledby="focusTitle" open>
-          <summary class="mobile-panel-summary">本周焦点</summary>
+          <summary class="mobile-panel-summary">周期焦点</summary>
           <div class="panel-heading">
-            <h2 id="focusTitle">本周焦点</h2>
-            <button class="icon-button subtle" id="clearWeek" type="button" aria-label="清空本周" title="清空本周">
+            <h2 id="focusTitle">周期焦点</h2>
+            <button class="icon-button subtle" id="clearWeek" type="button" aria-label="清空当前周期" title="清空当前周期">
               <svg viewBox="0 0 24 24" focusable="false">
                 <path d="M3 6h18" />
                 <path d="M8 6V4h8v2" />
@@ -45,7 +64,7 @@
               </svg>
             </button>
           </div>
-          <textarea id="weeklyFocus" rows="6" placeholder="这一周最重要的方向、限制或提醒"></textarea>
+          <textarea id="weeklyFocus" rows="6" placeholder="这个周期最重要的方向、限制或提醒"></textarea>
         </details>
 
         <details id="quickPanel" class="sidebar-quick" aria-label="快速记录" open>
@@ -86,7 +105,7 @@
           </form>
         </details>
 
-        <section class="panel stats-panel" aria-label="周统计">
+        <section class="panel stats-panel" aria-label="周期统计">
           <div>
             <span id="doneCount">0</span>
             <p id="doneLabel">已完成</p>
@@ -106,7 +125,7 @@
         <header class="topbar">
           <div>
             <p class="eyebrow">计划台</p>
-            <h2 id="activeDateLabel">本周</h2>
+            <h2 id="activeDateLabel">当前周期</h2>
           </div>
           <div class="actions">
             <button class="ghost-button" id="exportData" type="button">
@@ -128,7 +147,7 @@
 
         <nav class="page-tabs" role="tablist" aria-label="页面切换">
           <button class="page-tab active" id="plannerPageBtn" type="button" role="tab" aria-controls="plannerView" aria-selected="true">
-            日常版
+            周期版
           </button>
           <button class="page-tab" id="holidayPageBtn" type="button" role="tab" aria-controls="holidayView" aria-selected="false">
             假期版
@@ -149,7 +168,7 @@
             <section class="board-section" aria-labelledby="boardTitle">
               <div class="section-heading">
                 <div>
-                  <p class="eyebrow">一周节奏</p>
+                  <p class="eyebrow">周期节奏</p>
                   <h2 id="boardTitle">每日计划</h2>
                 </div>
                 <div class="view-switch" role="tablist" aria-label="视图切换">
@@ -182,11 +201,11 @@
               <section class="panel review-panel" aria-labelledby="reviewTitle">
                 <div class="panel-heading">
                   <div>
-                    <p class="eyebrow">周末复盘</p>
+                    <p class="eyebrow">周期复盘</p>
                     <h2 id="reviewTitle">留下结论</h2>
                   </div>
                 </div>
-                <textarea id="weeklyReview" rows="8" placeholder="哪些有效，哪些下周调整"></textarea>
+                <textarea id="weeklyReview" rows="8" placeholder="哪些有效，哪些要在后续周期调整"></textarea>
               </section>
             </aside>
           </section>
@@ -500,6 +519,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260622-1"></script>
+    <script src="app.js?v=20260709-1"></script>
   </body>
 </html>

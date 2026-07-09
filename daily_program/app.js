@@ -6,6 +6,7 @@ const GITHUB_API_VERSION = "2022-11-28";
 const PERIOD_MIN_DAYS = 15;
 const PERIOD_MAX_DAYS = 60;
 const PERIOD_DEFAULT_DAYS = 35;
+const PLAN_DEFAULT_DAYS = 7;
 
 const dayNames = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 const slotLabels = ["早", "中", "晚"];
@@ -40,10 +41,10 @@ const defaultGithubSyncConfig = {
 
 let state = loadState();
 let githubSync = loadGithubSyncConfig();
-let activeWeekStart = startOfWeek(new Date());
+let activePlanRange = normalizePlanRange(state.activePlanRange);
 let activeView = "all";
 let activePage = getInitialActivePage();
-let dialogPlanType = "week";
+let dialogPlanType = "plan";
 let toastTimer = 0;
 let githubWriteTimer = 0;
 let githubRequestInFlight = false;
@@ -54,6 +55,9 @@ const els = {
   prevWeek: document.querySelector("#prevWeek"),
   currentWeek: document.querySelector("#currentWeek"),
   nextWeek: document.querySelector("#nextWeek"),
+  planRangeForm: document.querySelector("#planRangeForm"),
+  planStart: document.querySelector("#planStart"),
+  planEnd: document.querySelector("#planEnd"),
   clearWeek: document.querySelector("#clearWeek"),
   focusPanel: document.querySelector("#focusPanel"),
   weeklyFocus: document.querySelector("#weeklyFocus"),
@@ -155,20 +159,25 @@ function initialize() {
 }
 
 function bindEvents() {
-  els.prevWeek.addEventListener("click", () => moveWeek(-1));
-  els.nextWeek.addEventListener("click", () => moveWeek(1));
+  els.prevWeek.addEventListener("click", () => movePlanRange(-1));
+  els.nextWeek.addEventListener("click", () => movePlanRange(1));
   els.currentWeek.addEventListener("click", () => {
-    activeWeekStart = startOfWeek(new Date());
+    setActivePlanRange(getDefaultPlanRange());
+    delete els.taskDay.dataset.touched;
     render();
+  });
+  els.planRangeForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    savePlanRange();
   });
 
   els.weeklyFocus.addEventListener("input", () => {
-    getActiveWeek().focus = els.weeklyFocus.value;
+    getActivePlan().focus = els.weeklyFocus.value;
     saveState();
   });
 
   els.weeklyReview.addEventListener("input", () => {
-    getActiveWeek().review = els.weeklyReview.value;
+    getActivePlan().review = els.weeklyReview.value;
     saveState();
   });
 
@@ -220,7 +229,7 @@ function bindEvents() {
     }
 
     if (editButton) {
-      openTaskDialog(editButton.dataset.editTask, "week");
+      openTaskDialog(editButton.dataset.editTask, "plan");
     }
   });
 
@@ -233,7 +242,7 @@ function bindEvents() {
 
     const slot = event.target.closest("[data-day-slot]");
     if (!slot) return;
-    updateDaySlot(slot.dataset.dateKey, Number(slot.dataset.slotIndex), slot.value, "week", Number(slot.dataset.daySlot));
+    updateDaySlot(slot.dataset.dateKey, Number(slot.dataset.slotIndex), slot.value, "plan", Number(slot.dataset.daySlot));
   });
 
   els.holidayDayGrid.addEventListener("click", (event) => {
@@ -283,10 +292,10 @@ function bindEvents() {
   });
 
   els.clearDoneIdeas.addEventListener("click", () => {
-    const week = getActiveWeek();
-    const before = week.ideas.length;
-    week.ideas = week.ideas.filter((idea) => !idea.archived);
-    if (week.ideas.length === before) {
+    const plan = getActivePlan();
+    const before = plan.ideas.length;
+    plan.ideas = plan.ideas.filter((idea) => !idea.archived);
+    if (plan.ideas.length === before) {
       showToast("没有已整理的想法");
       return;
     }
@@ -319,11 +328,11 @@ function bindEvents() {
   });
 
   els.clearWeek.addEventListener("click", () => {
-    const key = weekKey(activeWeekStart);
-    const ok = window.confirm("清空当前这一周的焦点、计划、想法和复盘？");
+    const key = planRangeKey(activePlanRange);
+    const ok = window.confirm("清空当前周期的焦点、计划、想法和复盘？");
     if (!ok) return;
-    state.weeks[key] = createWeek();
-    saveAndRender("这一周已清空");
+    state.plans[key] = createRegularPlan(getActivePlanDates().length);
+    saveAndRender("当前周期已清空");
   });
 
   els.allView.addEventListener("click", () => setView("all"));
@@ -339,8 +348,12 @@ function bindEvents() {
   [els.aggregateOpenList, els.aggregateDoneList].forEach((list) => {
     list.addEventListener("click", (event) => {
       const toggle = event.target.closest("[data-aggregate-toggle]");
-      if (!toggle) return;
-      toggleAggregateItem(toggle);
+      const remove = event.target.closest("[data-aggregate-delete]");
+      if (toggle) {
+        toggleAggregateItem(toggle);
+        return;
+      }
+      if (remove) deleteAggregateItem(remove);
     });
   });
 
@@ -429,7 +442,7 @@ function bindEvents() {
     plan.title = els.periodTitle.value.trim() || "阶段规划";
     saveState();
     renderPeriodSummary(plan);
-    updateActiveDateLabel(getWeekDates(activeWeekStart), getDisplayHoliday(), getHolidayDates(getDisplayHoliday()));
+    updateActiveDateLabel(getActivePlanDates(), getDisplayHoliday(), getHolidayDates(getDisplayHoliday()));
   });
 
   els.periodClearBtn.addEventListener("click", () => {
@@ -468,30 +481,36 @@ function bindEvents() {
 }
 
 function render() {
-  const week = getActiveWeek();
-  const dates = getWeekDates(activeWeekStart);
+  const plan = getActivePlan();
+  const dates = getActivePlanDates();
   const holiday = getDisplayHoliday();
   const holidayDates = getHolidayDates(holiday);
   const holidayPlan = getActiveHolidayPlan(holiday);
   const periodPlan = getPeriodPlan();
 
-  els.weekRange.textContent = `${formatMonthDay(dates[0])} - ${formatMonthDay(dates[6])}`;
+  els.weekRange.textContent = `${formatMonthDay(dates[0])} - ${formatMonthDay(dates[dates.length - 1])}`;
+  renderPlanRangeControls();
 
   renderQuickEntryControls(dates, holidayDates);
-  if (dialogPlanType === "week") renderDayOptions(els.dialogDay, dates);
+  if (dialogPlanType === "plan") renderDayOptions(els.dialogDay, dates);
 
-  els.weeklyFocus.value = week.focus;
-  els.weeklyReview.value = week.review;
+  els.weeklyFocus.value = plan.focus;
+  els.weeklyReview.value = plan.review;
 
-  renderTasks(week, dates, els.dayGrid);
-  renderIdeas(week, els.ideaList);
+  renderTasks(plan, dates, els.dayGrid);
+  renderIdeas(plan, els.ideaList);
   renderHoliday(holiday, holidayPlan, holidayDates);
   renderPeriod(periodPlan);
   renderAggregate();
-  renderStats(activePage === "holiday" ? holidayPlan : activePage === "period" ? periodPlan : week);
+  renderStats(activePage === "holiday" ? holidayPlan : activePage === "period" ? periodPlan : plan);
   renderViewSwitch();
   renderHolidayConfig();
   updateActiveDateLabel(dates, holiday, holidayDates);
+}
+
+function renderPlanRangeControls() {
+  els.planStart.value = activePlanRange.start;
+  els.planEnd.value = activePlanRange.end;
 }
 
 function configureMobileQuickPanel() {
@@ -630,7 +649,7 @@ function renderQuickEntryControls(weekDates, holidayDates) {
   const dates = type === "holiday" ? holidayDates : weekDates;
   renderDayOptions(els.taskDay, dates);
   syncDefaultTaskDay(els.taskDay, dates);
-  els.taskInput.placeholder = type === "holiday" ? "写下假期要推进的一件事" : "写下要推进的一件事";
+  els.taskInput.placeholder = type === "holiday" ? "写下假期要推进的一件事" : "写下这个周期要推进的一件事";
 }
 
 function renderTasks(plan, dates, grid) {
@@ -940,22 +959,30 @@ function createAggregateItem(item) {
   }
 
   body.append(title, meta);
-  card.append(check, body);
+  const remove = iconButton("delete-idea aggregate-delete", item.kind === "task" ? "删除计划" : "删除想法", trashIcon());
+  remove.dataset.aggregateDelete = "true";
+  remove.dataset.kind = item.kind;
+  remove.dataset.planType = item.planType;
+  remove.dataset.planKey = item.planKey;
+  remove.dataset.itemId = item.id;
+
+  card.append(check, body, remove);
   return card;
 }
 
 function collectAggregateItems() {
   const items = [];
 
-  Object.entries(state.weeks)
-    .filter(([key]) => isDateKey(key))
-    .forEach(([key, week]) => {
-      normalizeWeek(week);
-      const dates = getWeekDates(dateFromKey(key));
-      const sourceLabel = `日常 ${formatMonthDay(dates[0])}-${formatMonthDay(dates[dates.length - 1])}`;
+  Object.entries(state.plans || {})
+    .map(([key, plan]) => [key, parsePlanRangeKey(key), plan])
+    .filter(([, range]) => Boolean(range))
+    .forEach(([key, range, plan]) => {
+      const dates = getPlanDates(range);
+      normalizeRegularPlan(plan, dates.length);
+      const sourceLabel = `周期 ${formatMonthDay(dates[0])}-${formatMonthDay(dates[dates.length - 1])}`;
       appendPlanItems(items, {
-        plan: week,
-        planType: "week",
+        plan,
+        planType: "plan",
         planKey: key,
         dates,
         sourceLabel,
@@ -1093,7 +1120,7 @@ function syncDefaultTaskDay(select, dates) {
   }
 }
 
-function addTask({ title, day, priority, notes = "" }, type = "week") {
+function addTask({ title, day, priority, notes = "" }, type = "plan") {
   getPlanByType(type).tasks.push({
     id: createId(),
     title,
@@ -1106,7 +1133,7 @@ function addTask({ title, day, priority, notes = "" }, type = "week") {
   });
 }
 
-function toggleTask(id, type = "week") {
+function toggleTask(id, type = "plan") {
   const task = findTask(id, type);
   if (!task) return;
   task.done = !task.done;
@@ -1114,7 +1141,7 @@ function toggleTask(id, type = "week") {
   saveAndRender(task.done ? "做完了，漂亮" : "已恢复为未完成");
 }
 
-function toggleIdea(id, type = "week") {
+function toggleIdea(id, type = "plan") {
   const idea = getPlanByType(type).ideas.find((item) => item.id === id);
   if (!idea) return;
   idea.archived = !idea.archived;
@@ -1140,13 +1167,27 @@ function toggleAggregateItem(button) {
   saveAndRender(idea.archived ? "想法已收纳" : "想法已恢复为待处理");
 }
 
-function deleteIdea(id, type = "week") {
+function deleteAggregateItem(button) {
+  const plan = getPlanByReference(button.dataset.planType, button.dataset.planKey);
+  if (!plan) return;
+
+  if (button.dataset.kind === "task") {
+    plan.tasks = plan.tasks.filter((task) => task.id !== button.dataset.itemId);
+    saveAndRender("计划已删除");
+    return;
+  }
+
+  plan.ideas = plan.ideas.filter((idea) => idea.id !== button.dataset.itemId);
+  saveAndRender("想法已删除");
+}
+
+function deleteIdea(id, type = "plan") {
   const plan = getPlanByType(type);
   plan.ideas = plan.ideas.filter((idea) => idea.id !== id);
   saveAndRender("想法已删除");
 }
 
-function updateDaySlot(dayKey, slotIndex, value, type = "week", dayIndex = -1) {
+function updateDaySlot(dayKey, slotIndex, value, type = "plan", dayIndex = -1) {
   if (!isDateKey(dayKey) || slotIndex < 0 || slotIndex >= slotLabels.length) {
     return;
   }
@@ -1182,6 +1223,32 @@ function syncPeriodDayInputs(key, value) {
     const cell = control.closest(".period-day-cell");
     if (cell) cell.classList.toggle("filled", Boolean(value.trim()));
   });
+}
+
+function savePlanRange() {
+  const start = els.planStart.value;
+  const end = els.planEnd.value;
+  const validation = validatePlanRange(start, end);
+
+  if (!validation.valid) {
+    showToast(validation.message);
+    return;
+  }
+
+  setActivePlanRange({ start, end });
+  delete els.taskDay.dataset.touched;
+  render();
+  showToast(`已切换到 ${validation.dayCount} 天周期`);
+}
+
+function validatePlanRange(start, end) {
+  if (!isDateKey(start) || !isDateKey(end)) {
+    return { valid: false, message: "请填写完整的开始日期和结束日期。" };
+  }
+  if (start > end) {
+    return { valid: false, message: "开始日期不能晚于结束日期。" };
+  }
+  return { valid: true, dayCount: daysBetweenInclusive(start, end) };
 }
 
 function savePeriodConfig() {
@@ -1230,7 +1297,7 @@ function focusFirstPeriodCell() {
   target.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
 }
 
-function openTaskDialog(id, type = "week") {
+function openTaskDialog(id, type = "plan") {
   dialogPlanType = type;
   renderDayOptions(els.dialogDay, getDatesByType(type));
   const task = findTask(id, type);
@@ -1287,17 +1354,27 @@ function activatePage(page) {
   render();
 }
 
-function moveWeek(delta) {
-  activeWeekStart = addDays(activeWeekStart, delta * 7);
+function movePlanRange(delta) {
+  const dayCount = getActivePlanDates().length;
+  const start = addDays(dateFromKey(activePlanRange.start), delta * dayCount);
+  const end = addDays(start, dayCount - 1);
+  setActivePlanRange({ start: dateKey(start), end: dateKey(end) });
   delete els.taskDay.dataset.touched;
   render();
 }
 
-function getActiveWeek() {
-  const key = weekKey(activeWeekStart);
-  if (!state.weeks[key]) state.weeks[key] = createWeek();
-  normalizeWeek(state.weeks[key]);
-  return state.weeks[key];
+function setActivePlanRange(range, options = {}) {
+  activePlanRange = normalizePlanRange(range);
+  state.activePlanRange = { ...activePlanRange };
+  if (options.persist !== false) saveState({ github: false });
+}
+
+function getActivePlan() {
+  const dates = getActivePlanDates();
+  const key = planRangeKey(activePlanRange);
+  if (!state.plans[key]) state.plans[key] = createRegularPlan(dates.length);
+  normalizeRegularPlan(state.plans[key], dates.length);
+  return state.plans[key];
 }
 
 function getActiveHolidayPlan(holiday = getDisplayHoliday()) {
@@ -1310,6 +1387,10 @@ function getActiveHolidayPlan(holiday = getDisplayHoliday()) {
 function getPeriodPlan() {
   state.periodPlan = normalizePeriodPlan(state.periodPlan);
   return state.periodPlan;
+}
+
+function getActivePlanDates() {
+  return getPlanDates(activePlanRange);
 }
 
 function getDateSlotValues(date, fallbackPlan, dayIndex) {
@@ -1337,10 +1418,18 @@ function getPeriodDayNote(key) {
 }
 
 function getPlanByType(type) {
-  return type === "holiday" ? getActiveHolidayPlan() : getActiveWeek();
+  return type === "holiday" ? getActiveHolidayPlan() : getActivePlan();
 }
 
 function getPlanByReference(type, key) {
+  if (type === "plan") {
+    const range = parsePlanRangeKey(key);
+    const plan = range ? state.plans[key] : null;
+    if (!plan) return null;
+    normalizeRegularPlan(plan, getPlanDates(range).length);
+    return plan;
+  }
+
   if (type === "holiday") {
     const plan = state.holidays[key];
     if (!plan) return null;
@@ -1349,20 +1438,23 @@ function getPlanByReference(type, key) {
     return plan;
   }
 
-  if (!isDateKey(key) || !state.weeks[key]) return null;
-  normalizeWeek(state.weeks[key]);
-  return state.weeks[key];
+  if (!isDateKey(key)) return null;
+  const range = { start: key, end: dateKey(addDays(dateFromKey(key), PLAN_DEFAULT_DAYS - 1)) };
+  const plan = state.plans[planRangeKey(range)];
+  if (!plan) return null;
+  normalizeRegularPlan(plan, getPlanDates(range).length);
+  return plan;
 }
 
 function getQuickEntryType() {
-  return activePage === "holiday" ? "holiday" : "week";
+  return activePage === "holiday" ? "holiday" : "plan";
 }
 
 function getDatesByType(type) {
-  return type === "holiday" ? getHolidayDates(getDisplayHoliday()) : getWeekDates(activeWeekStart);
+  return type === "holiday" ? getHolidayDates(getDisplayHoliday()) : getActivePlanDates();
 }
 
-function findTask(id, type = "week") {
+function findTask(id, type = "plan") {
   return getPlanByType(type).tasks.find((task) => task.id === id);
 }
 
@@ -1373,20 +1465,20 @@ function saveAndRender(message) {
 }
 
 function exportWeek() {
-  const week = getActiveWeek();
-  const dates = getWeekDates(activeWeekStart);
+  const plan = getActivePlan();
+  const dates = getActivePlanDates();
   const lines = [
-    `# 每周计划 ${formatFullDate(dates[0])} - ${formatFullDate(dates[6])}`,
+    `# 周期计划 ${formatFullDate(dates[0])} - ${formatFullDate(dates[dates.length - 1])}`,
     "",
-    "## 本周焦点",
-    week.focus.trim() || "未填写",
+    "## 周期焦点",
+    plan.focus.trim() || "未填写",
     "",
     "## 每日计划",
   ];
 
   dates.forEach((date, index) => {
     lines.push("", `### ${formatWeekday(date)} ${formatMonthDay(date)}`);
-    const slots = getDateSlotValues(date, week, index).map((slot) => slot.trim()).filter(Boolean);
+    const slots = getDateSlotValues(date, plan, index).map((slot) => slot.trim()).filter(Boolean);
     if (slots.length === 0) {
       lines.push("- 暂无");
       return;
@@ -1395,10 +1487,10 @@ function exportWeek() {
   });
 
   lines.push("", "## 计划收纳");
-  if (week.tasks.length === 0) {
+  if (plan.tasks.length === 0) {
     lines.push("- 暂无");
   } else {
-    week.tasks.sort(compareTasks).forEach((task) => {
+    plan.tasks.sort(compareTasks).forEach((task) => {
       const checked = task.done ? "x" : " ";
       const note = task.notes.trim() ? ` - ${task.notes.trim()}` : "";
       lines.push(`- [${checked}] ${formatTaskDay(task, dates)} ${task.title}（${priorityLabels[task.priority]}）${note}`);
@@ -1406,21 +1498,21 @@ function exportWeek() {
   }
 
   lines.push("", "## 想法");
-  if (week.ideas.length === 0) {
+  if (plan.ideas.length === 0) {
     lines.push("- 暂无");
   } else {
-    week.ideas.forEach((idea) => {
+    plan.ideas.forEach((idea) => {
       lines.push(`- ${idea.archived ? "[已整理] " : ""}${idea.text}`);
     });
   }
 
-  lines.push("", "## 周末复盘", week.review.trim() || "未填写", "");
+  lines.push("", "## 周期复盘", plan.review.trim() || "未填写", "");
 
   const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `weekly-plan-${weekKey(activeWeekStart)}.md`;
+  link.download = `cycle-plan-${activePlanRange.start}-${activePlanRange.end}.md`;
   document.body.append(link);
   link.click();
   link.remove();
@@ -1567,34 +1659,62 @@ function appendAggregateExportLines(lines, items) {
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return normalizeState({ weeks: {}, holidays: {}, customHoliday: null, periodPlan: null, dateSlots: {} });
+    if (!raw) return normalizeState({ plans: {}, weeks: {}, holidays: {}, customHoliday: null, periodPlan: null, dateSlots: {} });
     const parsed = JSON.parse(raw);
     return normalizeState(parsed);
   } catch {
-    return normalizeState({ weeks: {}, holidays: {}, customHoliday: null, periodPlan: null, dateSlots: {} });
+    return normalizeState({ plans: {}, weeks: {}, holidays: {}, customHoliday: null, periodPlan: null, dateSlots: {} });
   }
 }
 
 function normalizeState(input) {
   const source = input && typeof input === "object" ? input : {};
-  const weeks = source.weeks && typeof source.weeks === "object" ? source.weeks : {};
+  const legacyWeeks = source.weeks && typeof source.weeks === "object" ? source.weeks : {};
+  const plans = normalizeRegularPlans(source.plans, legacyWeeks);
   const holidays = source.holidays && typeof source.holidays === "object" ? source.holidays : {};
   const customHoliday = normalizeCustomHoliday(source.customHoliday);
   const periodPlan = normalizePeriodPlan(source.periodPlan);
+  const activePlanRange = normalizePlanRange(source.activePlanRange, getInitialPlanRangeFallback(plans));
   const hasSharedDateSlots = source.dateSlots && typeof source.dateSlots === "object";
   const dateSlots = normalizeDateSlots(source.dateSlots);
-  Object.values(weeks).forEach(normalizeWeek);
   Object.entries(holidays).forEach(([id, plan]) => {
     const holiday = [...chinaHolidays, customHoliday].filter(Boolean).find((item) => item.id === id);
     const dayCount = holiday ? getHolidayDates(holiday).length : inferPlanDayCount(plan);
     normalizeHolidayPlan(plan, dayCount);
   });
-  if (!hasSharedDateSlots) migrateLegacyDateSlots(dateSlots, weeks, holidays, customHoliday);
-  return { weeks, holidays, customHoliday, periodPlan, dateSlots };
+  if (!hasSharedDateSlots) migrateLegacyDateSlots(dateSlots, legacyWeeks, holidays, customHoliday);
+  return { plans, holidays, customHoliday, periodPlan, dateSlots, activePlanRange };
 }
 
 function inferPlanDayCount(plan) {
   return Array.isArray(plan?.daySlots) && plan.daySlots.length > 0 ? plan.daySlots.length : 7;
+}
+
+function normalizeRegularPlans(input, legacyWeeks = {}) {
+  const plans = {};
+
+  if (input && typeof input === "object") {
+    Object.entries(input).forEach(([key, plan]) => {
+      const range = parsePlanRangeKey(key);
+      if (!range || !plan || typeof plan !== "object") return;
+      normalizeRegularPlan(plan, daysBetweenInclusive(range.start, range.end));
+      plans[planRangeKey(range)] = plan;
+    });
+  }
+
+  Object.entries(legacyWeeks || {}).forEach(([key, week]) => {
+    if (!isDateKey(key) || !week || typeof week !== "object") return;
+    const range = {
+      start: key,
+      end: dateKey(addDays(dateFromKey(key), PLAN_DEFAULT_DAYS - 1)),
+    };
+    const targetKey = planRangeKey(range);
+    if (plans[targetKey]) return;
+    normalizeRegularPlan(week, PLAN_DEFAULT_DAYS);
+    plans[targetKey] = week;
+  });
+
+  return plans;
 }
 
 function normalizeCustomHoliday(input) {
@@ -1613,7 +1733,9 @@ function normalizeCustomHoliday(input) {
 }
 
 function saveState(options = {}) {
+  state.activePlanRange = { ...activePlanRange };
   state = normalizeState(state);
+  activePlanRange = normalizePlanRange(state.activePlanRange);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state, null, 2));
   if (options.github !== false) markGithubDirty();
 }
@@ -1814,7 +1936,7 @@ async function githubReadContent() {
 
 async function githubWriteContent(content, sha) {
   const body = {
-    message: `Update weekly planner ${new Date().toISOString()}`,
+    message: `Update cycle planner ${new Date().toISOString()}`,
     content: utf8ToBase64(content),
     branch: githubSync.branch,
   };
@@ -1862,6 +1984,7 @@ async function pullFromGithub(options = {}) {
       }
     }
     state = remoteState;
+    activePlanRange = normalizePlanRange(state.activePlanRange);
     githubSync.sha = remote.sha;
     githubSync.lastSyncedAt = new Date().toISOString();
     githubSync.dirty = false;
@@ -1930,10 +2053,10 @@ async function pushToGithub(options = {}) {
   }
 }
 
-function createWeek() {
+function createRegularPlan(dayCount) {
   return {
     focus: "",
-    ...createPlan(7),
+    ...createPlan(dayCount),
   };
 }
 
@@ -1965,9 +2088,9 @@ function createEmptyDaySlots(dayCount = 7) {
   return Array.from({ length: dayCount }, () => ["", "", ""]);
 }
 
-function normalizeWeek(week) {
-  if (typeof week.focus !== "string") week.focus = "";
-  normalizePlan(week, 7);
+function normalizeRegularPlan(plan, dayCount) {
+  if (typeof plan.focus !== "string") plan.focus = "";
+  normalizePlan(plan, dayCount);
 }
 
 function normalizeHolidayPlan(plan, dayCount) {
@@ -2118,6 +2241,59 @@ function getWeekDates(start) {
   return Array.from({ length: 7 }, (_, index) => addDays(start, index));
 }
 
+function getDefaultPlanRange() {
+  const start = dateFromKey(getBeijingDateKey());
+  return {
+    start: dateKey(start),
+    end: dateKey(addDays(start, PLAN_DEFAULT_DAYS - 1)),
+  };
+}
+
+function getInitialPlanRangeFallback(plans = {}) {
+  const todayRange = getDefaultPlanRange();
+  const today = dateFromKey(getBeijingDateKey());
+  const currentWeekStart = startOfWeek(today);
+  const currentWeekRange = {
+    start: dateKey(currentWeekStart),
+    end: dateKey(addDays(currentWeekStart, PLAN_DEFAULT_DAYS - 1)),
+  };
+
+  if (plans[planRangeKey(currentWeekRange)]) return currentWeekRange;
+  if (plans[planRangeKey(todayRange)]) return todayRange;
+  return todayRange;
+}
+
+function normalizePlanRange(input, fallback = getDefaultPlanRange()) {
+  const source = input && typeof input === "object" ? input : {};
+  const start = isDateKey(source.start) ? source.start : fallback.start;
+  const end = isDateKey(source.end) ? source.end : fallback.end;
+  if (!isDateKey(start) || !isDateKey(end) || start > end) return { ...fallback };
+  return { start, end };
+}
+
+function planRangeKey(range) {
+  const normalized = normalizePlanRange(range);
+  return `${normalized.start}_${normalized.end}`;
+}
+
+function parsePlanRangeKey(key) {
+  const parts = String(key || "").split("_");
+  if (parts.length !== 2) return null;
+  const [start, end] = parts;
+  if (!isDateKey(start) || !isDateKey(end) || start > end) return null;
+  return { start, end };
+}
+
+function getPlanDates(range) {
+  const normalized = normalizePlanRange(range);
+  const dates = [];
+  const end = dateFromKey(normalized.end);
+  for (let date = dateFromKey(normalized.start); date <= end; date = addDays(date, 1)) {
+    dates.push(date);
+  }
+  return dates;
+}
+
 function getPeriodDates(plan = getPeriodPlan()) {
   const dates = [];
   const end = dateFromKey(plan.end);
@@ -2211,10 +2387,6 @@ function isTodayInBeijing(date) {
   return dateKey(date) === getBeijingDateKey();
 }
 
-function weekKey(date) {
-  return dateKey(date);
-}
-
 function createCustomHolidayId(name, start, end) {
   return `custom-${start}-${end}-${hashText(name).toString(36)}`;
 }
@@ -2266,7 +2438,7 @@ function updateActiveDateLabel(weekDates, holiday, holidayDates) {
     els.activeDateLabel.textContent = `${holiday.name} ${formatFullDate(holidayDates[0])} 至 ${formatFullDate(holidayDates[holidayDates.length - 1])}`;
     return;
   }
-  els.activeDateLabel.textContent = `${formatFullDate(weekDates[0])} 至 ${formatFullDate(weekDates[6])}`;
+  els.activeDateLabel.textContent = `${formatFullDate(weekDates[0])} 至 ${formatFullDate(weekDates[weekDates.length - 1])}`;
 }
 
 function formatShortTime(value) {

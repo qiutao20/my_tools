@@ -147,6 +147,31 @@ svg {
   gap: 8px;
 }
 
+.plan-range-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.plan-range-form label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.plan-range-form input {
+  min-height: 38px;
+  padding: 0 9px;
+}
+
+.plan-range-form button {
+  grid-column: 1 / -1;
+  min-height: 38px;
+}
+
 .icon-button,
 .today-button,
 .ghost-button,
@@ -1092,7 +1117,7 @@ select:focus {
 
 .aggregate-item {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr) 28px;
   gap: 10px;
   align-items: start;
   padding: 11px;
@@ -1193,7 +1218,8 @@ select:focus {
   background: transparent;
 }
 
-.delete-idea:hover {
+.delete-idea:hover,
+.aggregate-delete:hover {
   color: var(--red);
   background: #fff6f5;
 }
