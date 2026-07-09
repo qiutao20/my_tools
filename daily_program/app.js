@@ -71,9 +71,10 @@ const els = {
   quickPanel: document.querySelector("#quickPanel"),
   ideaForm: document.querySelector("#ideaForm"),
   ideaInput: document.querySelector("#ideaInput"),
+  ideaDeadline: document.querySelector("#ideaDeadline"),
   taskForm: document.querySelector("#taskForm"),
   taskInput: document.querySelector("#taskInput"),
-  taskDay: document.querySelector("#taskDay"),
+  taskDeadline: document.querySelector("#taskDeadline"),
   taskPriority: document.querySelector("#taskPriority"),
   dayGrid: document.querySelector("#dayGrid"),
   ideaList: document.querySelector("#ideaList"),
@@ -104,7 +105,7 @@ const els = {
   dialogForm: document.querySelector("#dialogForm"),
   dialogTaskId: document.querySelector("#dialogTaskId"),
   dialogTitle: document.querySelector("#dialogTitle"),
-  dialogDay: document.querySelector("#dialogDay"),
+  dialogDeadline: document.querySelector("#dialogDeadline"),
   dialogPriority: document.querySelector("#dialogPriority"),
   dialogNotes: document.querySelector("#dialogNotes"),
   deleteTask: document.querySelector("#deleteTask"),
@@ -163,7 +164,6 @@ function bindEvents() {
   els.nextWeek.addEventListener("click", () => movePlanRange(1));
   els.currentWeek.addEventListener("click", () => {
     setActivePlanRange(getDefaultPlanRange());
-    delete els.taskDay.dataset.touched;
     render();
   });
   els.planRangeForm.addEventListener("submit", (event) => {
@@ -191,9 +191,10 @@ function bindEvents() {
     const text = els.ideaInput.value.trim();
     if (!text) return;
     const type = getQuickEntryType();
-    getPlanByType(type).ideas.unshift({
+    getIdeasByType(type).unshift({
       id: createId(),
       text,
+      deadline: getInputDeadline(els.ideaDeadline),
       archived: false,
       createdAt: new Date().toISOString(),
     });
@@ -208,15 +209,17 @@ function bindEvents() {
     const type = getQuickEntryType();
     addTask({
       title,
-      day: Number(els.taskDay.value),
+      deadline: getInputDeadline(els.taskDeadline),
       priority: els.taskPriority.value,
     }, type);
     els.taskInput.value = "";
     saveAndRender(type === "holiday" ? "假期计划已添加" : "计划已添加");
   });
 
-  els.taskDay.addEventListener("change", () => {
-    els.taskDay.dataset.touched = "true";
+  [els.ideaDeadline, els.taskDeadline].forEach((input) => {
+    input.addEventListener("change", () => {
+      input.dataset.touched = "true";
+    });
   });
 
   els.dayGrid.addEventListener("click", (event) => {
@@ -292,10 +295,10 @@ function bindEvents() {
   });
 
   els.clearDoneIdeas.addEventListener("click", () => {
-    const plan = getActivePlan();
-    const before = plan.ideas.length;
-    plan.ideas = plan.ideas.filter((idea) => !idea.archived);
-    if (plan.ideas.length === before) {
+    const ideas = getIdeasByType("plan");
+    const before = ideas.length;
+    state.ideas = ideas.filter((idea) => !idea.archived);
+    if (state.ideas.length === before) {
       showToast("没有已整理的想法");
       return;
     }
@@ -329,7 +332,7 @@ function bindEvents() {
 
   els.clearWeek.addEventListener("click", () => {
     const key = planRangeKey(activePlanRange);
-    const ok = window.confirm("清空当前周期的焦点、计划、想法和复盘？");
+    const ok = window.confirm("清空当前周期的焦点、每日格子和复盘？想法和计划不会被删除。");
     if (!ok) return;
     state.plans[key] = createRegularPlan(getActivePlanDates().length);
     saveAndRender("当前周期已清空");
@@ -428,7 +431,6 @@ function bindEvents() {
       return;
     }
     state.customHoliday = null;
-    delete els.taskDay.dataset.touched;
     saveAndRender("已恢复内置假期");
   });
 
@@ -467,8 +469,7 @@ function bindEvents() {
   els.deleteTask.addEventListener("click", () => {
     const id = els.dialogTaskId.value;
     if (!id) return;
-    const plan = getPlanByType(dialogPlanType);
-    plan.tasks = plan.tasks.filter((task) => task.id !== id);
+    setTasksByType(dialogPlanType, getTasksByType(dialogPlanType).filter((task) => task.id !== id));
     closeDialog();
     saveAndRender("计划已删除");
   });
@@ -483,6 +484,7 @@ function bindEvents() {
 function render() {
   const plan = getActivePlan();
   const dates = getActivePlanDates();
+  const entryPlan = getGlobalEntryPlan();
   const holiday = getDisplayHoliday();
   const holidayDates = getHolidayDates(holiday);
   const holidayPlan = getActiveHolidayPlan(holiday);
@@ -492,17 +494,16 @@ function render() {
   renderPlanRangeControls();
 
   renderQuickEntryControls(dates, holidayDates);
-  if (dialogPlanType === "plan") renderDayOptions(els.dialogDay, dates);
 
   els.weeklyFocus.value = plan.focus;
   els.weeklyReview.value = plan.review;
 
-  renderTasks(plan, dates, els.dayGrid);
-  renderIdeas(plan, els.ideaList);
+  renderTasks(plan, dates, els.dayGrid, entryPlan);
+  renderIdeas(entryPlan, els.ideaList);
   renderHoliday(holiday, holidayPlan, holidayDates);
   renderPeriod(periodPlan);
   renderAggregate();
-  renderStats(activePage === "holiday" ? holidayPlan : activePage === "period" ? periodPlan : plan);
+  renderStats(activePage === "holiday" ? holidayPlan : activePage === "period" ? periodPlan : entryPlan);
   renderViewSwitch();
   renderHolidayConfig();
   updateActiveDateLabel(dates, holiday, holidayDates);
@@ -537,8 +538,6 @@ function renderHoliday(holiday, plan, dates) {
   els.holidayNameLabel.textContent = holiday.name;
   els.holidayDateLabel.textContent = `${formatFullDate(dates[0])} 至 ${formatFullDate(dates[dates.length - 1])}`;
   els.holidayReview.value = plan.review;
-
-  if (dialogPlanType === "holiday") renderDayOptions(els.dialogDay, dates);
 
   renderTasks(plan, dates, els.holidayDayGrid);
   renderIdeas(plan, els.holidayIdeaList);
@@ -646,13 +645,13 @@ function createPeriodDayCell(plan, date, key) {
 
 function renderQuickEntryControls(weekDates, holidayDates) {
   const type = getQuickEntryType();
-  const dates = type === "holiday" ? holidayDates : weekDates;
-  renderDayOptions(els.taskDay, dates);
-  syncDefaultTaskDay(els.taskDay, dates);
-  els.taskInput.placeholder = type === "holiday" ? "写下假期要推进的一件事" : "写下这个周期要推进的一件事";
+  const defaultDeadline = type === "holiday" ? dateKey(holidayDates[holidayDates.length - 1]) : getBeijingDateKey();
+  syncDefaultDeadline(els.ideaDeadline, defaultDeadline);
+  syncDefaultDeadline(els.taskDeadline, defaultDeadline);
+  els.taskInput.placeholder = type === "holiday" ? "写下假期要推进的一件事" : "写下要推进的一件事";
 }
 
-function renderTasks(plan, dates, grid) {
+function renderTasks(plan, dates, grid, inboxPlan = plan) {
   grid.replaceChildren();
 
   for (let rowStart = 0; rowStart < dates.length; rowStart += 5) {
@@ -662,14 +661,14 @@ function renderTasks(plan, dates, grid) {
       weekRow.cells.append(createDayColumn(plan, date, rowStart + offset));
     });
     if (rowStart + rowDates.length >= dates.length && rowDates.length < 5) {
-      weekRow.cells.append(createPlanInbox(plan, dates, 5 - rowDates.length));
+      weekRow.cells.append(createPlanInbox(inboxPlan, dates, 5 - rowDates.length));
     }
     grid.append(weekRow.row);
   }
 
   if (dates.length % 5 === 0) {
     const inboxRow = createWeekRow();
-    inboxRow.cells.append(createPlanInbox(plan, dates, 5));
+    inboxRow.cells.append(createPlanInbox(inboxPlan, dates, 5));
     grid.append(inboxRow.row);
   }
 }
@@ -775,7 +774,7 @@ function createPlanInbox(plan, dates, span = 3) {
   title.textContent = "计划收纳";
   const subtitle = document.createElement("span");
   subtitle.className = "day-date";
-  subtitle.textContent = "顶部添加的条目";
+  subtitle.textContent = "按截止时间排序";
   titleWrap.append(title, subtitle);
   head.append(titleWrap);
 
@@ -821,7 +820,7 @@ function createTaskCard(task, dates) {
   meta.className = "task-meta";
   const day = document.createElement("span");
   day.className = "pill day-label";
-  day.textContent = formatTaskDay(task, dates);
+  day.textContent = formatTaskTiming(task, dates);
   meta.append(day);
 
   const priority = document.createElement("span");
@@ -875,7 +874,7 @@ function renderIdeas(plan, list) {
     text.textContent = idea.text;
     const time = document.createElement("span");
     time.className = "idea-time";
-    time.textContent = formatShortTime(idea.createdAt);
+    time.textContent = `${formatDeadlineLabel(idea.deadline)} · 记录 ${formatShortTime(idea.createdAt)}`;
     body.append(text, time);
 
     const del = iconButton("delete-idea", "删除想法", trashIcon());
@@ -973,26 +972,17 @@ function createAggregateItem(item) {
 function collectAggregateItems() {
   const items = [];
 
-  Object.entries(state.plans || {})
-    .map(([key, plan]) => [key, parsePlanRangeKey(key), plan])
-    .filter(([, range]) => Boolean(range))
-    .forEach(([key, range, plan]) => {
-      const dates = getPlanDates(range);
-      normalizeRegularPlan(plan, dates.length);
-      const sourceLabel = `周期 ${formatMonthDay(dates[0])}-${formatMonthDay(dates[dates.length - 1])}`;
-      appendPlanItems(items, {
-        plan,
-        planType: "plan",
-        planKey: key,
-        dates,
-        sourceLabel,
-      });
-    });
+  appendPlanItems(items, {
+    plan: getGlobalEntryPlan(),
+    planType: "plan",
+    planKey: "",
+    sourceLabel: "全局",
+  });
 
   Object.entries(state.holidays).forEach(([key, plan]) => {
     const holiday = getHolidayById(key);
     const dates = holiday ? getHolidayDates(holiday) : Array.from({ length: inferPlanDayCount(plan) });
-    normalizeHolidayPlan(plan, dates.length);
+    normalizeHolidayPlan(plan, dates.length, dates);
     const sourceLabel = holiday
       ? `${holiday.name} ${formatMonthDay(dates[0])}-${formatMonthDay(dates[dates.length - 1])}`
       : `假期 ${key}`;
@@ -1017,10 +1007,11 @@ function appendPlanItems(items, context) {
       text: task.title,
       done: task.done,
       priority: task.priority,
-      dateLabel: formatTaskDay(task, context.dates),
+      dateLabel: formatTaskTiming(task, context.dates),
       sourceLabel: context.sourceLabel,
       planType: context.planType,
       planKey: context.planKey,
+      deadline: task.deadline,
       sortTime: task.updatedAt || task.createdAt,
     });
   });
@@ -1032,10 +1023,11 @@ function appendPlanItems(items, context) {
       id: idea.id,
       text: idea.text,
       done: idea.archived,
-      dateLabel: formatShortTime(idea.createdAt),
+      dateLabel: formatDeadlineLabel(idea.deadline),
       sourceLabel: context.sourceLabel,
       planType: context.planType,
       planKey: context.planKey,
+      deadline: idea.deadline,
       sortTime: idea.createdAt,
     });
   });
@@ -1043,6 +1035,8 @@ function appendPlanItems(items, context) {
 
 function compareAggregateItems(a, b) {
   if (a.done !== b.done) return Number(a.done) - Number(b.done);
+  const deadlineDiff = deadlineSortValue(a.deadline) - deadlineSortValue(b.deadline);
+  if (deadlineDiff !== 0) return deadlineDiff;
   const aTime = new Date(a.sortTime || 0).getTime();
   const bTime = new Date(b.sortTime || 0).getTime();
   return bTime - aTime;
@@ -1098,33 +1092,17 @@ function renderViewSwitch() {
   });
 }
 
-function renderDayOptions(select, dates) {
-  const previous = select.value;
-  select.replaceChildren();
-  dates.forEach((date, index) => {
-    const option = document.createElement("option");
-    option.value = String(index);
-    option.textContent = `${formatWeekday(date)} ${formatMonthDay(date)}`;
-    select.append(option);
-  });
-  if (previous && Number(previous) >= 0 && Number(previous) < dates.length) {
-    select.value = previous;
+function syncDefaultDeadline(input, fallback = getBeijingDateKey()) {
+  if (!input.dataset.touched || !isDateKey(input.value)) {
+    input.value = fallback;
   }
 }
 
-function syncDefaultTaskDay(select, dates) {
-  const todayIndex = dates.findIndex(isTodayInBeijing);
-  if (todayIndex >= 0 && !select.dataset.touched) {
-    select.value = String(todayIndex);
-    select.dataset.touched = "true";
-  }
-}
-
-function addTask({ title, day, priority, notes = "" }, type = "plan") {
-  getPlanByType(type).tasks.push({
+function addTask({ title, deadline, priority, notes = "" }, type = "plan") {
+  getTasksByType(type).push({
     id: createId(),
     title,
-    day,
+    deadline: isDateKey(deadline) ? deadline : getBeijingDateKey(),
     priority,
     notes,
     done: false,
@@ -1142,7 +1120,7 @@ function toggleTask(id, type = "plan") {
 }
 
 function toggleIdea(id, type = "plan") {
-  const idea = getPlanByType(type).ideas.find((item) => item.id === id);
+  const idea = getIdeasByType(type).find((item) => item.id === id);
   if (!idea) return;
   idea.archived = !idea.archived;
   saveAndRender(idea.archived ? "想法已整理" : "想法已恢复");
@@ -1172,18 +1150,27 @@ function deleteAggregateItem(button) {
   if (!plan) return;
 
   if (button.dataset.kind === "task") {
-    plan.tasks = plan.tasks.filter((task) => task.id !== button.dataset.itemId);
+    const tasks = plan.tasks.filter((task) => task.id !== button.dataset.itemId);
+    if (button.dataset.planType === "plan") {
+      state.tasks = tasks;
+    } else {
+      plan.tasks = tasks;
+    }
     saveAndRender("计划已删除");
     return;
   }
 
-  plan.ideas = plan.ideas.filter((idea) => idea.id !== button.dataset.itemId);
+  const ideas = plan.ideas.filter((idea) => idea.id !== button.dataset.itemId);
+  if (button.dataset.planType === "plan") {
+    state.ideas = ideas;
+  } else {
+    plan.ideas = ideas;
+  }
   saveAndRender("想法已删除");
 }
 
 function deleteIdea(id, type = "plan") {
-  const plan = getPlanByType(type);
-  plan.ideas = plan.ideas.filter((idea) => idea.id !== id);
+  setIdeasByType(type, getIdeasByType(type).filter((idea) => idea.id !== id));
   saveAndRender("想法已删除");
 }
 
@@ -1236,7 +1223,6 @@ function savePlanRange() {
   }
 
   setActivePlanRange({ start, end });
-  delete els.taskDay.dataset.touched;
   render();
   showToast(`已切换到 ${validation.dayCount} 天周期`);
 }
@@ -1287,6 +1273,13 @@ function validatePeriodRange(start, end) {
   return { valid: true, dayCount };
 }
 
+function getInputDeadline(input) {
+  if (isDateKey(input.value)) return input.value;
+  const fallback = getBeijingDateKey();
+  input.value = fallback;
+  return fallback;
+}
+
 function focusFirstPeriodCell() {
   activatePage("period");
   const empty = [...els.periodGrid.querySelectorAll("[data-period-day]")]
@@ -1299,12 +1292,11 @@ function focusFirstPeriodCell() {
 
 function openTaskDialog(id, type = "plan") {
   dialogPlanType = type;
-  renderDayOptions(els.dialogDay, getDatesByType(type));
   const task = findTask(id, type);
   if (!task) return;
   els.dialogTaskId.value = task.id;
   els.dialogTitle.value = task.title;
-  els.dialogDay.value = String(task.day);
+  els.dialogDeadline.value = isDateKey(task.deadline) ? task.deadline : getBeijingDateKey();
   els.dialogPriority.value = task.priority;
   els.dialogNotes.value = task.notes;
   els.taskDialog.showModal();
@@ -1316,7 +1308,7 @@ function saveDialogTask() {
   const task = findTask(id, dialogPlanType);
   if (!task) return;
   task.title = els.dialogTitle.value.trim();
-  task.day = Number(els.dialogDay.value);
+  task.deadline = getInputDeadline(els.dialogDeadline);
   task.priority = els.dialogPriority.value;
   task.notes = els.dialogNotes.value.trim();
   task.updatedAt = new Date().toISOString();
@@ -1359,7 +1351,6 @@ function movePlanRange(delta) {
   const start = addDays(dateFromKey(activePlanRange.start), delta * dayCount);
   const end = addDays(start, dayCount - 1);
   setActivePlanRange({ start: dateKey(start), end: dateKey(end) });
-  delete els.taskDay.dataset.touched;
   render();
 }
 
@@ -1373,14 +1364,14 @@ function getActivePlan() {
   const dates = getActivePlanDates();
   const key = planRangeKey(activePlanRange);
   if (!state.plans[key]) state.plans[key] = createRegularPlan(dates.length);
-  normalizeRegularPlan(state.plans[key], dates.length);
+  normalizeRegularPlan(state.plans[key], dates.length, dates);
   return state.plans[key];
 }
 
 function getActiveHolidayPlan(holiday = getDisplayHoliday()) {
   const dates = getHolidayDates(holiday);
   if (!state.holidays[holiday.id]) state.holidays[holiday.id] = createHolidayPlan(dates.length);
-  normalizeHolidayPlan(state.holidays[holiday.id], dates.length);
+  normalizeHolidayPlan(state.holidays[holiday.id], dates.length, dates);
   return state.holidays[holiday.id];
 }
 
@@ -1417,24 +1408,52 @@ function getPeriodDayNote(key) {
   return getPeriodPlan().dayNotes[key] || "";
 }
 
+function getGlobalEntryPlan() {
+  return {
+    tasks: state.tasks,
+    ideas: state.ideas,
+  };
+}
+
 function getPlanByType(type) {
   return type === "holiday" ? getActiveHolidayPlan() : getActivePlan();
 }
 
+function getTasksByType(type) {
+  return type === "holiday" ? getActiveHolidayPlan().tasks : state.tasks;
+}
+
+function getIdeasByType(type) {
+  return type === "holiday" ? getActiveHolidayPlan().ideas : state.ideas;
+}
+
+function setTasksByType(type, tasks) {
+  if (type === "holiday") {
+    getActiveHolidayPlan().tasks = tasks;
+    return;
+  }
+  state.tasks = tasks;
+}
+
+function setIdeasByType(type, ideas) {
+  if (type === "holiday") {
+    getActiveHolidayPlan().ideas = ideas;
+    return;
+  }
+  state.ideas = ideas;
+}
+
 function getPlanByReference(type, key) {
   if (type === "plan") {
-    const range = parsePlanRangeKey(key);
-    const plan = range ? state.plans[key] : null;
-    if (!plan) return null;
-    normalizeRegularPlan(plan, getPlanDates(range).length);
-    return plan;
+    return getGlobalEntryPlan();
   }
 
   if (type === "holiday") {
     const plan = state.holidays[key];
     if (!plan) return null;
     const holiday = getHolidayById(key);
-    normalizeHolidayPlan(plan, holiday ? getHolidayDates(holiday).length : inferPlanDayCount(plan));
+    const dates = holiday ? getHolidayDates(holiday) : [];
+    normalizeHolidayPlan(plan, dates.length || inferPlanDayCount(plan), dates);
     return plan;
   }
 
@@ -1442,7 +1461,8 @@ function getPlanByReference(type, key) {
   const range = { start: key, end: dateKey(addDays(dateFromKey(key), PLAN_DEFAULT_DAYS - 1)) };
   const plan = state.plans[planRangeKey(range)];
   if (!plan) return null;
-  normalizeRegularPlan(plan, getPlanDates(range).length);
+  const dates = getPlanDates(range);
+  normalizeRegularPlan(plan, dates.length, dates);
   return plan;
 }
 
@@ -1450,12 +1470,8 @@ function getQuickEntryType() {
   return activePage === "holiday" ? "holiday" : "plan";
 }
 
-function getDatesByType(type) {
-  return type === "holiday" ? getHolidayDates(getDisplayHoliday()) : getActivePlanDates();
-}
-
 function findTask(id, type = "plan") {
-  return getPlanByType(type).tasks.find((task) => task.id === id);
+  return getTasksByType(type).find((task) => task.id === id);
 }
 
 function saveAndRender(message) {
@@ -1486,23 +1502,25 @@ function exportWeek() {
     slots.forEach((slot, slotIndex) => lines.push(`${slotIndex + 1}. ${slot}`));
   });
 
-  lines.push("", "## 计划收纳");
-  if (plan.tasks.length === 0) {
+  const entryPlan = getGlobalEntryPlan();
+
+  lines.push("", "## 全局计划");
+  if (entryPlan.tasks.length === 0) {
     lines.push("- 暂无");
   } else {
-    plan.tasks.sort(compareTasks).forEach((task) => {
+    [...entryPlan.tasks].sort(compareTasks).forEach((task) => {
       const checked = task.done ? "x" : " ";
       const note = task.notes.trim() ? ` - ${task.notes.trim()}` : "";
-      lines.push(`- [${checked}] ${formatTaskDay(task, dates)} ${task.title}（${priorityLabels[task.priority]}）${note}`);
+      lines.push(`- [${checked}] ${formatTaskTiming(task, dates)} ${task.title}（${priorityLabels[task.priority]}）${note}`);
     });
   }
 
-  lines.push("", "## 想法");
-  if (plan.ideas.length === 0) {
+  lines.push("", "## 全局想法");
+  if (entryPlan.ideas.length === 0) {
     lines.push("- 暂无");
   } else {
-    plan.ideas.forEach((idea) => {
-      lines.push(`- ${idea.archived ? "[已整理] " : ""}${idea.text}`);
+    [...entryPlan.ideas].sort(compareIdeas).forEach((idea) => {
+      lines.push(`- ${idea.archived ? "[已整理] " : ""}${formatDeadlineLabel(idea.deadline)}｜${idea.text}`);
     });
   }
 
@@ -1547,7 +1565,7 @@ function exportHoliday() {
     plan.tasks.sort(compareTasks).forEach((task) => {
       const checked = task.done ? "x" : " ";
       const note = task.notes.trim() ? ` - ${task.notes.trim()}` : "";
-      lines.push(`- [${checked}] ${formatTaskDay(task, dates)} ${task.title}（${priorityLabels[task.priority]}）${note}`);
+      lines.push(`- [${checked}] ${formatTaskTiming(task, dates)} ${task.title}（${priorityLabels[task.priority]}）${note}`);
     });
   }
 
@@ -1556,7 +1574,7 @@ function exportHoliday() {
     lines.push("- 暂无");
   } else {
     plan.ideas.forEach((idea) => {
-      lines.push(`- ${idea.archived ? "[已整理] " : ""}${idea.text}`);
+      lines.push(`- ${idea.archived ? "[已整理] " : ""}${formatDeadlineLabel(idea.deadline)}｜${idea.text}`);
     });
   }
 
@@ -1659,11 +1677,11 @@ function appendAggregateExportLines(lines, items) {
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return normalizeState({ plans: {}, weeks: {}, holidays: {}, customHoliday: null, periodPlan: null, dateSlots: {} });
+    if (!raw) return normalizeState({ plans: {}, tasks: [], ideas: [], weeks: {}, holidays: {}, customHoliday: null, periodPlan: null, dateSlots: {} });
     const parsed = JSON.parse(raw);
     return normalizeState(parsed);
   } catch {
-    return normalizeState({ plans: {}, weeks: {}, holidays: {}, customHoliday: null, periodPlan: null, dateSlots: {} });
+    return normalizeState({ plans: {}, tasks: [], ideas: [], weeks: {}, holidays: {}, customHoliday: null, periodPlan: null, dateSlots: {} });
   }
 }
 
@@ -1671,6 +1689,9 @@ function normalizeState(input) {
   const source = input && typeof input === "object" ? input : {};
   const legacyWeeks = source.weeks && typeof source.weeks === "object" ? source.weeks : {};
   const plans = normalizeRegularPlans(source.plans, legacyWeeks);
+  const tasks = normalizeTasks(source.tasks);
+  const ideas = normalizeIdeas(source.ideas);
+  migratePlanEntriesToGlobal(plans, tasks, ideas);
   const holidays = source.holidays && typeof source.holidays === "object" ? source.holidays : {};
   const customHoliday = normalizeCustomHoliday(source.customHoliday);
   const periodPlan = normalizePeriodPlan(source.periodPlan);
@@ -1679,15 +1700,60 @@ function normalizeState(input) {
   const dateSlots = normalizeDateSlots(source.dateSlots);
   Object.entries(holidays).forEach(([id, plan]) => {
     const holiday = [...chinaHolidays, customHoliday].filter(Boolean).find((item) => item.id === id);
-    const dayCount = holiday ? getHolidayDates(holiday).length : inferPlanDayCount(plan);
-    normalizeHolidayPlan(plan, dayCount);
+    const dates = holiday ? getHolidayDates(holiday) : [];
+    const dayCount = dates.length || inferPlanDayCount(plan);
+    normalizeHolidayPlan(plan, dayCount, dates);
   });
   if (!hasSharedDateSlots) migrateLegacyDateSlots(dateSlots, legacyWeeks, holidays, customHoliday);
-  return { plans, holidays, customHoliday, periodPlan, dateSlots, activePlanRange };
+  return { plans, tasks, ideas, holidays, customHoliday, periodPlan, dateSlots, activePlanRange };
 }
 
 function inferPlanDayCount(plan) {
   return Array.isArray(plan?.daySlots) && plan.daySlots.length > 0 ? plan.daySlots.length : 7;
+}
+
+function normalizeTasks(input, dates = [], fallbackDeadline = getBeijingDateKey()) {
+  const source = Array.isArray(input) ? input : [];
+  return source
+    .filter((task) => task && typeof task === "object")
+    .map((task) => normalizeTask(task, dates, fallbackDeadline));
+}
+
+function normalizeIdeas(input, fallbackDeadline = getBeijingDateKey()) {
+  const source = Array.isArray(input) ? input : [];
+  return source
+    .filter((idea) => idea && typeof idea === "object")
+    .map((idea) => normalizeIdea(idea, fallbackDeadline));
+}
+
+function normalizeTask(task, dates = [], fallbackDeadline = getBeijingDateKey()) {
+  if (typeof task.id !== "string") task.id = createId();
+  if (typeof task.title !== "string") task.title = "";
+  task.deadline = normalizeDeadline(task.deadline, task.day, dates, fallbackDeadline);
+  if (!["high", "normal", "low"].includes(task.priority)) task.priority = "normal";
+  if (typeof task.notes !== "string") task.notes = "";
+  task.done = Boolean(task.done);
+  if (typeof task.createdAt !== "string") task.createdAt = new Date().toISOString();
+  if (typeof task.updatedAt !== "string") task.updatedAt = task.createdAt;
+  return task;
+}
+
+function normalizeIdea(idea, fallbackDeadline = getBeijingDateKey()) {
+  if (typeof idea.id !== "string") idea.id = createId();
+  if (typeof idea.text !== "string") idea.text = "";
+  idea.deadline = isDateKey(idea.deadline) ? idea.deadline : fallbackDeadline;
+  idea.archived = Boolean(idea.archived);
+  if (typeof idea.createdAt !== "string") idea.createdAt = new Date().toISOString();
+  return idea;
+}
+
+function normalizeDeadline(deadline, legacyDay, dates = [], fallbackDeadline = getBeijingDateKey()) {
+  if (isDateKey(deadline)) return deadline;
+  const dayIndex = Number(legacyDay);
+  if (Number.isInteger(dayIndex) && dayIndex >= 0 && dayIndex < dates.length) {
+    return dateKey(dates[dayIndex]);
+  }
+  return isDateKey(fallbackDeadline) ? fallbackDeadline : getBeijingDateKey();
 }
 
 function normalizeRegularPlans(input, legacyWeeks = {}) {
@@ -1697,7 +1763,8 @@ function normalizeRegularPlans(input, legacyWeeks = {}) {
     Object.entries(input).forEach(([key, plan]) => {
       const range = parsePlanRangeKey(key);
       if (!range || !plan || typeof plan !== "object") return;
-      normalizeRegularPlan(plan, daysBetweenInclusive(range.start, range.end));
+      const dates = getPlanDates(range);
+      normalizeRegularPlan(plan, dates.length, dates);
       plans[planRangeKey(range)] = plan;
     });
   }
@@ -1710,11 +1777,38 @@ function normalizeRegularPlans(input, legacyWeeks = {}) {
     };
     const targetKey = planRangeKey(range);
     if (plans[targetKey]) return;
-    normalizeRegularPlan(week, PLAN_DEFAULT_DAYS);
+    const dates = getPlanDates(range);
+    normalizeRegularPlan(week, dates.length, dates);
     plans[targetKey] = week;
   });
 
   return plans;
+}
+
+function migratePlanEntriesToGlobal(plans, tasks, ideas) {
+  const taskIds = new Set(tasks.map((task) => task.id));
+  const ideaIds = new Set(ideas.map((idea) => idea.id));
+
+  Object.entries(plans).forEach(([key, plan]) => {
+    const range = parsePlanRangeKey(key);
+    const fallbackDeadline = range?.end || getBeijingDateKey();
+    const dates = range ? getPlanDates(range) : [];
+
+    normalizeTasks(plan.tasks, dates, fallbackDeadline).forEach((task) => {
+      if (taskIds.has(task.id)) return;
+      taskIds.add(task.id);
+      tasks.push(task);
+    });
+
+    normalizeIdeas(plan.ideas, fallbackDeadline).forEach((idea) => {
+      if (ideaIds.has(idea.id)) return;
+      ideaIds.add(idea.id);
+      ideas.push(idea);
+    });
+
+    plan.tasks = [];
+    plan.ideas = [];
+  });
 }
 
 function normalizeCustomHoliday(input) {
@@ -1810,7 +1904,6 @@ function saveCustomHoliday() {
   }
 
   state.customHoliday = customHoliday;
-  delete els.taskDay.dataset.touched;
   saveState();
   activatePage("holiday");
   showToast("假期版已切换到自定义假期");
@@ -2088,13 +2181,13 @@ function createEmptyDaySlots(dayCount = 7) {
   return Array.from({ length: dayCount }, () => ["", "", ""]);
 }
 
-function normalizeRegularPlan(plan, dayCount) {
+function normalizeRegularPlan(plan, dayCount, dates = []) {
   if (typeof plan.focus !== "string") plan.focus = "";
-  normalizePlan(plan, dayCount);
+  normalizePlan(plan, dayCount, dates);
 }
 
-function normalizeHolidayPlan(plan, dayCount) {
-  normalizePlan(plan, dayCount);
+function normalizeHolidayPlan(plan, dayCount, dates = []) {
+  normalizePlan(plan, dayCount, dates);
 }
 
 function normalizePeriodPlan(input) {
@@ -2173,7 +2266,7 @@ function normalizeSlotArray(slots) {
   ));
 }
 
-function normalizePlan(plan, dayCount) {
+function normalizePlan(plan, dayCount, dates = []) {
   if (typeof plan.review !== "string") plan.review = "";
   if (!Array.isArray(plan.tasks)) plan.tasks = [];
   if (!Array.isArray(plan.ideas)) plan.ideas = [];
@@ -2190,36 +2283,30 @@ function normalizePlan(plan, dayCount) {
   }
   plan.daySlots = plan.daySlots.slice(0, dayCount);
 
-  plan.tasks.forEach((task) => {
-    if (typeof task.id !== "string") task.id = createId();
-    if (typeof task.title !== "string") task.title = "";
-    if (!Number.isInteger(Number(task.day)) || Number(task.day) < 0 || Number(task.day) >= dayCount) {
-      task.day = 0;
-    } else {
-      task.day = Number(task.day);
-    }
-    if (!["high", "normal", "low"].includes(task.priority)) task.priority = "normal";
-    if (typeof task.notes !== "string") task.notes = "";
-    task.done = Boolean(task.done);
-    if (typeof task.createdAt !== "string") task.createdAt = new Date().toISOString();
-    if (typeof task.updatedAt !== "string") task.updatedAt = task.createdAt;
-  });
-
-  plan.ideas.forEach((idea) => {
-    if (typeof idea.id !== "string") idea.id = createId();
-    if (typeof idea.text !== "string") idea.text = "";
-    idea.archived = Boolean(idea.archived);
-    if (typeof idea.createdAt !== "string") idea.createdAt = new Date().toISOString();
-  });
+  const fallbackDeadline = dates.length ? dateKey(dates[dates.length - 1]) : getBeijingDateKey();
+  plan.tasks = normalizeTasks(plan.tasks, dates, fallbackDeadline);
+  plan.ideas = normalizeIdeas(plan.ideas, fallbackDeadline);
 }
 
 function compareTasks(a, b) {
   if (a.done !== b.done) return Number(a.done) - Number(b.done);
-  if (a.day !== b.day) return a.day - b.day;
+  const deadlineDiff = deadlineSortValue(a.deadline) - deadlineSortValue(b.deadline);
+  if (deadlineDiff !== 0) return deadlineDiff;
   const priorityRank = { high: 0, normal: 1, low: 2 };
   const priorityDiff = priorityRank[a.priority] - priorityRank[b.priority];
   if (priorityDiff !== 0) return priorityDiff;
   return new Date(a.createdAt) - new Date(b.createdAt);
+}
+
+function compareIdeas(a, b) {
+  if (a.archived !== b.archived) return Number(a.archived) - Number(b.archived);
+  const deadlineDiff = deadlineSortValue(a.deadline) - deadlineSortValue(b.deadline);
+  if (deadlineDiff !== 0) return deadlineDiff;
+  return new Date(b.createdAt) - new Date(a.createdAt);
+}
+
+function deadlineSortValue(value) {
+  return isDateKey(value) ? dateFromKey(value).getTime() : Number.MAX_SAFE_INTEGER;
 }
 
 function startOfWeek(date) {
@@ -2410,6 +2497,19 @@ function formatFullDate(date) {
 function formatWeekday(date) {
   const index = date.getDay() === 0 ? 6 : date.getDay() - 1;
   return dayNames[index];
+}
+
+function formatTaskTiming(task, dates) {
+  if (isDateKey(task.deadline)) {
+    return formatDeadlineLabel(task.deadline);
+  }
+  return formatTaskDay(task, dates);
+}
+
+function formatDeadlineLabel(value) {
+  if (!isDateKey(value)) return "截止未定";
+  const date = dateFromKey(value);
+  return `截止 ${formatWeekday(date)} ${formatMonthDay(date)}`;
 }
 
 function formatTaskDay(task, dates) {

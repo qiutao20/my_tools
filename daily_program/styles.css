@@ -506,6 +506,14 @@ select:focus {
   flex: 1 1 calc(50% - 6px);
 }
 
+.sidebar-quick .input-row .quick-deadline {
+  flex: 0 0 132px;
+}
+
+.sidebar-quick .task-row .quick-deadline {
+  flex: 1 1 calc(50% - 6px);
+}
+
 .input-row {
   gap: 8px;
 }
@@ -518,6 +526,7 @@ select:focus {
   grid-template-columns: 1fr;
 }
 
+.quick-deadline,
 .task-row select {
   flex: 0 0 112px;
 }
@@ -1680,6 +1689,7 @@ select:focus {
     flex-basis: 100%;
   }
 
+  .sidebar-quick .input-row .quick-deadline,
   .task-row select {
     flex: 1 1 calc(50% - 8px);
   }

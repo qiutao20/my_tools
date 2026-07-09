@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>周期计划</title>
-    <link rel="stylesheet" href="styles.css?v=20260709-1" />
+    <link rel="stylesheet" href="styles.css?v=20260709-2" />
   </head>
   <body>
     <div class="app-shell">
@@ -76,6 +76,7 @@
             <label for="ideaInput">想法</label>
             <div class="input-row">
               <input id="ideaInput" type="text" maxlength="120" placeholder="先放进来，稍后整理" autocomplete="off" />
+              <input id="ideaDeadline" class="quick-deadline" type="date" aria-label="选择想法截止日期" />
               <button class="icon-button filled" type="submit" aria-label="记录想法" title="记录想法">
                 <svg viewBox="0 0 24 24" focusable="false">
                   <path d="M5 12h14" />
@@ -89,7 +90,7 @@
             <label for="taskInput">计划</label>
             <div class="input-row task-row">
               <input id="taskInput" type="text" maxlength="140" placeholder="写下要推进的一件事" autocomplete="off" />
-              <select id="taskDay" aria-label="选择日期"></select>
+              <input id="taskDeadline" class="quick-deadline" type="date" aria-label="选择计划截止日期" />
               <select id="taskPriority" aria-label="选择优先级">
                 <option value="normal">普通</option>
                 <option value="high">重要</option>
@@ -495,8 +496,8 @@
         </label>
         <div class="dialog-grid">
           <label>
-            日期
-            <select id="dialogDay"></select>
+            截止
+            <input id="dialogDeadline" type="date" required />
           </label>
           <label>
             优先级
@@ -519,6 +520,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260709-1"></script>
+    <script src="app.js?v=20260709-2"></script>
   </body>
 </html>
