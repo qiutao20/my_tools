@@ -1408,7 +1408,15 @@ function getPeriodDayNote(key) {
   return getPeriodPlan().dayNotes[key] || "";
 }
 
+function ensureEntryState() {
+  if (!state.plans || typeof state.plans !== "object") state.plans = {};
+  state.tasks = normalizeTasks(state.tasks);
+  state.ideas = normalizeIdeas(state.ideas);
+  migratePlanEntriesToGlobal(state.plans, state.tasks, state.ideas);
+}
+
 function getGlobalEntryPlan() {
+  ensureEntryState();
   return {
     tasks: state.tasks,
     ideas: state.ideas,
@@ -1420,10 +1428,12 @@ function getPlanByType(type) {
 }
 
 function getTasksByType(type) {
+  if (type !== "holiday") ensureEntryState();
   return type === "holiday" ? getActiveHolidayPlan().tasks : state.tasks;
 }
 
 function getIdeasByType(type) {
+  if (type !== "holiday") ensureEntryState();
   return type === "holiday" ? getActiveHolidayPlan().ideas : state.ideas;
 }
 
