@@ -981,8 +981,8 @@ function collectAggregateItems() {
 
   Object.entries(state.holidays).forEach(([key, plan]) => {
     const holiday = getHolidayById(key);
-    const dates = holiday ? getHolidayDates(holiday) : Array.from({ length: inferPlanDayCount(plan) });
-    normalizeHolidayPlan(plan, dates.length, dates);
+    const dates = holiday ? getHolidayDates(holiday) : [];
+    normalizeHolidayPlan(plan, dates.length || inferPlanDayCount(plan), dates);
     const sourceLabel = holiday
       ? `${holiday.name} ${formatMonthDay(dates[0])}-${formatMonthDay(dates[dates.length - 1])}`
       : `假期 ${key}`;
@@ -2293,7 +2293,8 @@ function normalizePlan(plan, dayCount, dates = []) {
   }
   plan.daySlots = plan.daySlots.slice(0, dayCount);
 
-  const fallbackDeadline = dates.length ? dateKey(dates[dates.length - 1]) : getBeijingDateKey();
+  const lastDate = [...dates].reverse().find(isValidDate);
+  const fallbackDeadline = lastDate ? dateKey(lastDate) : getBeijingDateKey();
   plan.tasks = normalizeTasks(plan.tasks, dates, fallbackDeadline);
   plan.ideas = normalizeIdeas(plan.ideas, fallbackDeadline);
 }
@@ -2474,6 +2475,7 @@ function daysBetweenInclusive(start, end) {
 }
 
 function dateKey(date) {
+  if (!isValidDate(date)) return "";
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
@@ -2481,6 +2483,7 @@ function dateKey(date) {
 }
 
 function isTodayInBeijing(date) {
+  if (!isValidDate(date)) return false;
   return dateKey(date) === getBeijingDateKey();
 }
 
@@ -2497,16 +2500,23 @@ function hashText(value) {
 }
 
 function formatMonthDay(date) {
+  if (!isValidDate(date)) return "";
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
 function formatFullDate(date) {
+  if (!isValidDate(date)) return "";
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
 function formatWeekday(date) {
+  if (!isValidDate(date)) return "";
   const index = date.getDay() === 0 ? 6 : date.getDay() - 1;
   return dayNames[index];
+}
+
+function isValidDate(date) {
+  return date instanceof Date && !Number.isNaN(date.getTime());
 }
 
 function formatTaskTiming(task, dates) {
