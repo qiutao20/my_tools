@@ -101,6 +101,7 @@ const els = {
   holidayReview: document.querySelector("#holidayReview"),
   quickAddTask: document.querySelector("#quickAddTask"),
   exportData: document.querySelector("#exportData"),
+  saveData: document.querySelector("#saveData"),
   taskDialog: document.querySelector("#taskDialog"),
   dialogForm: document.querySelector("#dialogForm"),
   dialogTaskId: document.querySelector("#dialogTaskId"),
@@ -384,6 +385,8 @@ function bindEvents() {
     }
     exportWeek();
   });
+
+  els.saveData.addEventListener("click", () => pushToGithub());
 
   [
     els.githubOwner,
@@ -1953,7 +1956,7 @@ function updateGithubStatus(message) {
 
 function setGithubBusy(isBusy) {
   githubRequestInFlight = isBusy;
-  [els.githubSaveConfigBtn, els.githubPullBtn, els.githubPushBtn, els.githubClearBtn].forEach((button) => {
+  [els.saveData, els.githubSaveConfigBtn, els.githubPullBtn, els.githubPushBtn, els.githubClearBtn].forEach((button) => {
     button.disabled = isBusy;
   });
 }
@@ -2542,7 +2545,7 @@ function formatTaskDay(task, dates) {
 
 function updateActiveDateLabel(weekDates, holiday, holidayDates) {
   if (activePage === "sync") {
-    els.activeDateLabel.textContent = "GitHub 数据同步";
+    els.activeDateLabel.textContent = "设置";
     return;
   }
   if (activePage === "inbox") {
