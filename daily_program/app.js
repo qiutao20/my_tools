@@ -7,6 +7,9 @@ const PERIOD_MIN_DAYS = 15;
 const PERIOD_MAX_DAYS = 60;
 const PERIOD_DEFAULT_DAYS = 35;
 const PLAN_DEFAULT_DAYS = 7;
+const NOTE_IMAGE_MAX_FILE_BYTES = 10 * 1024 * 1024;
+const NOTE_IMAGE_MAX_DATA_URL_LENGTH = 1_500_000;
+const NOTE_IMAGE_MAX_EDGE = 1400;
 
 const dayNames = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 const slotLabels = ["早", "中", "晚"];
@@ -44,6 +47,7 @@ let githubSync = loadGithubSyncConfig();
 let activePlanRange = normalizePlanRange(state.activePlanRange);
 let activeView = "all";
 let activePage = getInitialActivePage();
+let activeNoteId = state.notes[0]?.id || "";
 let dialogPlanType = "plan";
 let toastTimer = 0;
 let githubWriteTimer = 0;
@@ -85,11 +89,13 @@ const els = {
   holidayPageBtn: document.querySelector("#holidayPageBtn"),
   periodPageBtn: document.querySelector("#periodPageBtn"),
   inboxPageBtn: document.querySelector("#inboxPageBtn"),
+  notesPageBtn: document.querySelector("#notesPageBtn"),
   syncPageBtn: document.querySelector("#syncPageBtn"),
   plannerView: document.querySelector("#plannerView"),
   holidayView: document.querySelector("#holidayView"),
   periodView: document.querySelector("#periodView"),
   inboxView: document.querySelector("#inboxView"),
+  notesView: document.querySelector("#notesView"),
   syncView: document.querySelector("#syncView"),
   holidayNameLabel: document.querySelector("#holidayNameLabel"),
   holidayDateLabel: document.querySelector("#holidayDateLabel"),
@@ -143,6 +149,17 @@ const els = {
   aggregateDoneCount: document.querySelector("#aggregateDoneCount"),
   aggregateOpenList: document.querySelector("#aggregateOpenList"),
   aggregateDoneList: document.querySelector("#aggregateDoneList"),
+  newNoteBtn: document.querySelector("#newNoteBtn"),
+  emptyNewNoteBtn: document.querySelector("#emptyNewNoteBtn"),
+  notesList: document.querySelector("#notesList"),
+  noteEmpty: document.querySelector("#noteEmpty"),
+  noteEditorPane: document.querySelector("#noteEditorPane"),
+  noteTitleInput: document.querySelector("#noteTitleInput"),
+  noteEditor: document.querySelector("#noteEditor"),
+  noteEditorMeta: document.querySelector("#noteEditorMeta"),
+  addNoteImageBtn: document.querySelector("#addNoteImageBtn"),
+  noteImageInput: document.querySelector("#noteImageInput"),
+  deleteNoteBtn: document.querySelector("#deleteNoteBtn"),
   toast: document.querySelector("#toast"),
 };
 
@@ -345,6 +362,7 @@ function bindEvents() {
   els.holidayPageBtn.addEventListener("click", () => activatePage("holiday"));
   els.periodPageBtn.addEventListener("click", () => activatePage("period"));
   els.inboxPageBtn.addEventListener("click", () => activatePage("inbox"));
+  els.notesPageBtn.addEventListener("click", () => activatePage("notes"));
   els.syncPageBtn.addEventListener("click", () => activatePage("sync"));
   els.holidayAllView.addEventListener("click", () => setView("all"));
   els.holidayOpenView.addEventListener("click", () => setView("open"));
@@ -361,6 +379,36 @@ function bindEvents() {
     });
   });
 
+  els.newNoteBtn.addEventListener("click", createNote);
+  els.emptyNewNoteBtn.addEventListener("click", createNote);
+  els.notesList.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-note-id]");
+    if (!item) return;
+    activeNoteId = item.dataset.noteId;
+    renderNotes();
+  });
+  els.noteTitleInput.addEventListener("input", updateActiveNoteTitle);
+  els.noteEditor.addEventListener("input", updateActiveNoteContent);
+  els.addNoteImageBtn.addEventListener("click", () => els.noteImageInput.click());
+  els.noteImageInput.addEventListener("change", async () => {
+    await addImagesToActiveNote([...els.noteImageInput.files]);
+    els.noteImageInput.value = "";
+  });
+  els.noteEditor.addEventListener("paste", handleNotePaste);
+  els.noteEditor.addEventListener("dragover", (event) => {
+    if ([...event.dataTransfer.items].some((item) => item.kind === "file" && item.type.startsWith("image/"))) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    }
+  });
+  els.noteEditor.addEventListener("drop", async (event) => {
+    const images = [...event.dataTransfer.files].filter((file) => file.type.startsWith("image/"));
+    if (images.length === 0) return;
+    event.preventDefault();
+    await addImagesToActiveNote(images);
+  });
+  els.deleteNoteBtn.addEventListener("click", deleteActiveNote);
+
   els.quickAddTask.addEventListener("click", () => {
     if (activePage === "period") {
       focusFirstPeriodCell();
@@ -371,6 +419,10 @@ function bindEvents() {
   });
 
   els.exportData.addEventListener("click", () => {
+    if (activePage === "notes") {
+      exportNote();
+      return;
+    }
     if (activePage === "inbox") {
       exportAggregate();
       return;
@@ -506,6 +558,7 @@ function render() {
   renderHoliday(holiday, holidayPlan, holidayDates);
   renderPeriod(periodPlan);
   renderAggregate();
+  renderNotes();
   renderStats(activePage === "holiday" ? holidayPlan : activePage === "period" ? periodPlan : entryPlan);
   renderViewSwitch();
   renderHolidayConfig();
@@ -898,6 +951,223 @@ function renderAggregate() {
   els.aggregateDoneCount.textContent = String(doneItems.length);
   renderAggregateList(openItems, els.aggregateOpenList, "没有待处理的想法和计划");
   renderAggregateList(doneItems, els.aggregateDoneList, "完成后会收纳在这里");
+}
+
+function renderNotes() {
+  if (!state.notes.some((note) => note.id === activeNoteId)) {
+    activeNoteId = state.notes[0]?.id || "";
+  }
+  renderNotesList();
+
+  const note = getActiveNote();
+  const hasNote = Boolean(note);
+  els.noteEmpty.hidden = hasNote;
+  els.noteEditorPane.hidden = !hasNote;
+  if (!note) return;
+
+  els.noteTitleInput.value = note.title;
+  els.noteEditor.innerHTML = note.content;
+  updateNoteEditorMeta(note);
+}
+
+function renderNotesList() {
+  els.notesList.replaceChildren();
+  if (state.notes.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state notes-list-empty";
+    empty.textContent = "新建笔记后，标题会显示在这里";
+    els.notesList.append(empty);
+    return;
+  }
+
+  state.notes.forEach((note) => {
+    const item = document.createElement("button");
+    item.className = "notes-list-item";
+    item.type = "button";
+    item.dataset.noteId = note.id;
+    item.classList.toggle("active", note.id === activeNoteId);
+    item.setAttribute("aria-pressed", String(note.id === activeNoteId));
+
+    const title = document.createElement("span");
+    title.textContent = note.title.trim() || "无标题笔记";
+    const time = document.createElement("small");
+    time.textContent = `更新于 ${formatShortTime(note.updatedAt)}`;
+    item.append(title, time);
+    els.notesList.append(item);
+  });
+}
+
+function createNote() {
+  const now = new Date().toISOString();
+  const note = {
+    id: createId(),
+    title: "新笔记",
+    content: "",
+    createdAt: now,
+    updatedAt: now,
+  };
+  state.notes.unshift(note);
+  activeNoteId = note.id;
+  saveState();
+  renderNotes();
+  els.noteTitleInput.focus();
+  els.noteTitleInput.select();
+  showToast("已新建笔记");
+}
+
+function getActiveNote() {
+  return state.notes.find((note) => note.id === activeNoteId) || null;
+}
+
+function updateActiveNoteTitle() {
+  const note = getActiveNote();
+  if (!note) return;
+  note.title = els.noteTitleInput.value.slice(0, 80);
+  note.updatedAt = new Date().toISOString();
+  saveState();
+  renderNotesList();
+  updateNoteEditorMeta(getActiveNote());
+}
+
+function updateActiveNoteContent() {
+  const note = getActiveNote();
+  if (!note) return;
+  note.content = sanitizeNoteContent(els.noteEditor.innerHTML);
+  note.updatedAt = new Date().toISOString();
+  saveState();
+  renderNotesList();
+  updateNoteEditorMeta(getActiveNote());
+}
+
+function updateNoteEditorMeta(note) {
+  els.noteEditorMeta.textContent = note ? `自动保存 · ${formatShortTime(note.updatedAt)}` : "";
+}
+
+function deleteActiveNote() {
+  const note = getActiveNote();
+  if (!note) return;
+  const confirmed = window.confirm(`删除笔记“${note.title.trim() || "无标题笔记"}”？此操作不可恢复。`);
+  if (!confirmed) return;
+  const index = state.notes.findIndex((item) => item.id === note.id);
+  state.notes.splice(index, 1);
+  activeNoteId = state.notes[index]?.id || state.notes[index - 1]?.id || "";
+  saveState();
+  renderNotes();
+  showToast("笔记已删除");
+}
+
+async function handleNotePaste(event) {
+  const images = [...event.clipboardData.items]
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
+  if (images.length > 0) {
+    event.preventDefault();
+    await addImagesToActiveNote(images);
+    return;
+  }
+
+  event.preventDefault();
+  insertPlainTextAtCursor(event.clipboardData.getData("text/plain"));
+  updateActiveNoteContent();
+}
+
+function insertPlainTextAtCursor(text) {
+  els.noteEditor.focus();
+  const selection = window.getSelection();
+  let range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+  if (!range || !els.noteEditor.contains(range.commonAncestorContainer)) {
+    range = document.createRange();
+    range.selectNodeContents(els.noteEditor);
+    range.collapse(false);
+  }
+  range.deleteContents();
+  const textNode = document.createTextNode(text);
+  range.insertNode(textNode);
+  range.setStartAfter(textNode);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+async function addImagesToActiveNote(files) {
+  const note = getActiveNote();
+  const supported = files.filter((file) => ["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type));
+  if (!note || supported.length === 0) {
+    showToast("请选择 PNG、JPEG、WebP 或 GIF 图片");
+    return;
+  }
+
+  const previousContent = note.content;
+  els.addNoteImageBtn.disabled = true;
+  showToast("正在处理图片...");
+  try {
+    const images = [];
+    for (const file of supported) {
+      images.push({ src: await prepareNoteImage(file), alt: file.name || "笔记图片" });
+    }
+
+    const container = document.createElement("div");
+    container.innerHTML = previousContent;
+    images.forEach(({ src, alt }) => {
+      const block = document.createElement("div");
+      const image = document.createElement("img");
+      image.src = src;
+      image.alt = alt;
+      block.append(image, document.createElement("br"));
+      container.append(block);
+    });
+
+    note.content = sanitizeNoteContent(container.innerHTML);
+    note.updatedAt = new Date().toISOString();
+    saveState();
+    if (activeNoteId === note.id) renderNotes();
+    showToast(`已添加 ${images.length} 张图片`);
+  } catch (error) {
+    const current = state.notes.find((item) => item.id === note.id);
+    if (current) current.content = previousContent;
+    console.error(error);
+    showToast(error.name === "QuotaExceededError" ? "浏览器存储空间不足，请减少图片" : error.message);
+    renderNotes();
+  } finally {
+    els.addNoteImageBtn.disabled = false;
+  }
+}
+
+async function prepareNoteImage(file) {
+  if (file.size > NOTE_IMAGE_MAX_FILE_BYTES) {
+    throw new Error(`图片 ${file.name || ""} 超过 10 MB`);
+  }
+  const source = await fileToDataUrl(file);
+  const image = await loadImage(source);
+  const scale = Math.min(1, NOTE_IMAGE_MAX_EDGE / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+  const dataUrl = canvas.toDataURL("image/webp", 0.82);
+  if (dataUrl.length > NOTE_IMAGE_MAX_DATA_URL_LENGTH) {
+    throw new Error(`图片 ${file.name || ""} 压缩后仍过大`);
+  }
+  return dataUrl;
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result || "")), { once: true });
+    reader.addEventListener("error", () => reject(new Error("图片读取失败")), { once: true });
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.addEventListener("load", () => resolve(image), { once: true });
+    image.addEventListener("error", () => reject(new Error("图片解析失败")), { once: true });
+    image.src = src;
+  });
 }
 
 function renderAggregateList(items, list, emptyText) {
@@ -1329,7 +1599,7 @@ function setView(view) {
 }
 
 function activatePage(page) {
-  activePage = ["planner", "holiday", "period", "inbox", "sync"].includes(page) ? page : "planner";
+  activePage = ["planner", "holiday", "period", "inbox", "notes", "sync"].includes(page) ? page : "planner";
   localStorage.setItem(ACTIVE_PAGE_KEY, activePage);
 
   [
@@ -1337,6 +1607,7 @@ function activatePage(page) {
     ["holiday", els.holidayView, els.holidayPageBtn],
     ["period", els.periodView, els.periodPageBtn],
     ["inbox", els.inboxView, els.inboxPageBtn],
+    ["notes", els.notesView, els.notesPageBtn],
     ["sync", els.syncView, els.syncPageBtn],
   ].forEach(([name, view, button]) => {
     const active = activePage === name;
@@ -1551,6 +1822,44 @@ function exportWeek() {
   showToast("已导出 Markdown");
 }
 
+function exportNote() {
+  const note = getActiveNote();
+  if (!note) {
+    showToast("当前没有可导出的笔记");
+    return;
+  }
+  const title = note.title.trim() || "无标题笔记";
+  const html = `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)}</title>
+  <style>body{max-width:860px;margin:40px auto;padding:0 20px;color:#1f2933;font:16px/1.7 system-ui,sans-serif}img{display:block;max-width:100%;height:auto;margin:18px 0}h1{line-height:1.25}</style>
+</head>
+<body><h1>${escapeHtml(title)}</h1><main>${sanitizeNoteContent(note.content)}</main></body>
+</html>`;
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${title.replace(/[\\/:*?"<>|]/g, "-").slice(0, 60) || "note"}.html`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  showToast("已导出笔记 HTML");
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function exportHoliday() {
   const holiday = getDisplayHoliday();
   const plan = getActiveHolidayPlan(holiday);
@@ -1704,6 +2013,7 @@ function normalizeState(input) {
   const plans = normalizeRegularPlans(source.plans, legacyWeeks);
   const tasks = normalizeTasks(source.tasks);
   const ideas = normalizeIdeas(source.ideas);
+  const notes = normalizeNotes(source.notes);
   migratePlanEntriesToGlobal(plans, tasks, ideas);
   const holidays = source.holidays && typeof source.holidays === "object" ? source.holidays : {};
   const customHoliday = normalizeCustomHoliday(source.customHoliday);
@@ -1718,7 +2028,7 @@ function normalizeState(input) {
     normalizeHolidayPlan(plan, dayCount, dates);
   });
   if (!hasSharedDateSlots) migrateLegacyDateSlots(dateSlots, legacyWeeks, holidays, customHoliday);
-  return { plans, tasks, ideas, holidays, customHoliday, periodPlan, dateSlots, activePlanRange };
+  return { plans, tasks, ideas, notes, holidays, customHoliday, periodPlan, dateSlots, activePlanRange };
 }
 
 function inferPlanDayCount(plan) {
@@ -1737,6 +2047,48 @@ function normalizeIdeas(input, fallbackDeadline = getBeijingDateKey()) {
   return source
     .filter((idea) => idea && typeof idea === "object")
     .map((idea) => normalizeIdea(idea, fallbackDeadline));
+}
+
+function normalizeNotes(input) {
+  const source = Array.isArray(input) ? input : [];
+  return source
+    .filter((note) => note && typeof note === "object")
+    .map((note) => {
+      const createdAt = typeof note.createdAt === "string" ? note.createdAt : new Date().toISOString();
+      return {
+        id: typeof note.id === "string" ? note.id : createId(),
+        title: typeof note.title === "string" ? note.title.slice(0, 80) : "",
+        content: sanitizeNoteContent(note.content),
+        createdAt,
+        updatedAt: typeof note.updatedAt === "string" ? note.updatedAt : createdAt,
+      };
+    });
+}
+
+function sanitizeNoteContent(input) {
+  const template = document.createElement("template");
+  template.innerHTML = typeof input === "string" ? input : "";
+  const allowedTags = new Set(["DIV", "P", "BR", "IMG"]);
+  [...template.content.querySelectorAll("*")].forEach((element) => {
+    if (!allowedTags.has(element.tagName)) {
+      element.replaceWith(document.createTextNode(element.textContent || ""));
+      return;
+    }
+    if (element.tagName === "IMG") {
+      const src = element.getAttribute("src") || "";
+      if (!/^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(src)) {
+        element.remove();
+        return;
+      }
+      const alt = element.getAttribute("alt") || "笔记图片";
+      [...element.attributes].forEach((attribute) => element.removeAttribute(attribute.name));
+      element.setAttribute("src", src);
+      element.setAttribute("alt", alt.slice(0, 160));
+      return;
+    }
+    [...element.attributes].forEach((attribute) => element.removeAttribute(attribute.name));
+  });
+  return template.innerHTML;
 }
 
 function normalizeTask(task, dates = [], fallbackDeadline = getBeijingDateKey()) {
@@ -2033,9 +2385,19 @@ async function githubReadContent() {
     throw new Error(`GitHub ${response.status}: ${await githubErrorMessage(response)}`);
   }
   const payload = await response.json();
+  let encodedContent = payload.content || "";
+  if (!encodedContent && payload.git_url) {
+    const blobResponse = await fetch(payload.git_url, { headers: githubHeaders() });
+    if (!blobResponse.ok) {
+      throw new Error(`GitHub ${blobResponse.status}: ${await githubErrorMessage(blobResponse)}`);
+    }
+    const blobPayload = await blobResponse.json();
+    encodedContent = blobPayload.content || "";
+  }
+  if (!encodedContent) throw new Error("GitHub 返回的数据文件为空或无法读取。");
   return {
     sha: payload.sha,
-    text: base64ToUtf8(payload.content || ""),
+    text: base64ToUtf8(encodedContent),
     htmlUrl: payload.html_url || "",
   };
 }
@@ -2417,7 +2779,7 @@ function getPeriodWeekStarts(dates) {
 function getInitialActivePage() {
   if (getCurrentHoliday()) return "holiday";
   const saved = localStorage.getItem(ACTIVE_PAGE_KEY);
-  return ["planner", "holiday", "period", "inbox", "sync"].includes(saved) ? saved : "planner";
+  return ["planner", "holiday", "period", "inbox", "notes", "sync"].includes(saved) ? saved : "planner";
 }
 
 function getCurrentHoliday(dateKey = getBeijingDateKey()) {
@@ -2550,6 +2912,10 @@ function updateActiveDateLabel(weekDates, holiday, holidayDates) {
   }
   if (activePage === "inbox") {
     els.activeDateLabel.textContent = "想法和计划汇总";
+    return;
+  }
+  if (activePage === "notes") {
+    els.activeDateLabel.textContent = "笔记";
     return;
   }
   if (activePage === "period") {

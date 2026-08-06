@@ -451,6 +451,17 @@ select:focus {
   display: block;
 }
 
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
 .input-strip {
   display: grid;
   grid-template-columns: minmax(240px, 0.8fr) minmax(360px, 1.2fr);
@@ -924,6 +935,10 @@ select:focus {
   padding-bottom: 24px;
 }
 
+.notes-view {
+  padding-bottom: 24px;
+}
+
 .period-page {
   display: flex;
   flex-direction: column;
@@ -934,6 +949,178 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.notes-page {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+  min-height: 640px;
+}
+
+.notes-sidebar,
+.note-editor-panel {
+  min-width: 0;
+  padding: 16px;
+}
+
+.notes-sidebar {
+  display: flex;
+  flex-direction: column;
+}
+
+.notes-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  max-height: calc(100vh - 240px);
+  overflow: auto;
+}
+
+.notes-list-item {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: var(--surface);
+  text-align: left;
+}
+
+.notes-list-item:hover {
+  border-color: rgba(47, 125, 92, 0.42);
+  background: #f5f8f6;
+}
+
+.notes-list-item.active {
+  border-color: var(--green);
+  background: #eef7f2;
+  box-shadow: inset 3px 0 0 var(--green);
+}
+
+.notes-list-item span {
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes-list-item small,
+.note-editor-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.notes-list-empty {
+  margin: auto 0;
+}
+
+.note-editor-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.note-empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  flex: 1;
+  gap: 14px;
+  min-height: 520px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.note-empty[hidden],
+.note-editor-pane[hidden] {
+  display: none;
+}
+
+.note-empty p {
+  margin: 0;
+  font-weight: 800;
+}
+
+.note-editor-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.note-editor-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.note-title-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 4px;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: transparent;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.note-editor-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.note-editor {
+  width: 100%;
+  min-width: 280px;
+  min-height: 520px;
+  padding: 18px;
+  overflow: auto;
+  resize: both;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.note-editor:focus {
+  position: relative;
+  z-index: 2;
+  border-color: rgba(47, 125, 92, 0.7);
+  box-shadow: 0 0 0 3px rgba(47, 125, 92, 0.13);
+}
+
+.note-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.note-editor img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 14px 0;
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(27, 38, 49, 0.12);
+}
+
+.note-editor-meta {
+  min-height: 18px;
+  text-align: right;
 }
 
 .period-toolbar {
@@ -1855,6 +2042,27 @@ select:focus {
     gap: 16px;
   }
 
+  .notes-page {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .notes-list {
+    flex-direction: row;
+    max-height: none;
+    padding-bottom: 4px;
+    overflow-x: auto;
+  }
+
+  .notes-list-item {
+    width: min(72vw, 260px);
+  }
+
+  .note-editor {
+    min-width: 100%;
+    min-height: 420px;
+  }
+
   .sync-status {
     min-height: 0;
   }
@@ -1875,6 +2083,22 @@ select:focus {
     font-size: 18px;
   }
 
+  .topbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .topbar .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  #exportData,
+  #saveData {
+    width: 100%;
+  }
+
   .ghost-button,
   .primary-button,
   .danger-button,
@@ -1884,5 +2108,14 @@ select:focus {
 
   .dialog-grid {
     grid-template-columns: 1fr;
+  }
+
+  .note-editor-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .note-editor-actions > button {
+    flex: 1;
   }
 }

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>周期计划</title>
-    <link rel="stylesheet" href="styles.css?v=20260806-1" />
+    <link rel="stylesheet" href="styles.css?v=20260806-2" />
   </head>
   <body>
     <div class="app-shell">
@@ -166,6 +166,9 @@
           </button>
           <button class="page-tab" id="inboxPageBtn" type="button" role="tab" aria-controls="inboxView" aria-selected="false">
             汇总
+          </button>
+          <button class="page-tab" id="notesPageBtn" type="button" role="tab" aria-controls="notesView" aria-selected="false">
+            笔记
           </button>
           <button class="page-tab" id="syncPageBtn" type="button" role="tab" aria-controls="syncView" aria-selected="false">
             设置
@@ -375,6 +378,59 @@
           </section>
         </section>
 
+        <section class="app-view notes-view" id="notesView" role="tabpanel" aria-labelledby="notesPageBtn">
+          <section class="notes-page">
+            <aside class="panel notes-sidebar" aria-labelledby="notesTitle">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">笔记列表</p>
+                  <h2 id="notesTitle">我的笔记</h2>
+                </div>
+                <button class="icon-button filled" id="newNoteBtn" type="button" aria-label="新建笔记" title="新建笔记">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+              </div>
+              <div class="notes-list" id="notesList"></div>
+            </aside>
+
+            <section class="panel note-editor-panel" aria-label="笔记编辑区">
+              <div class="note-empty" id="noteEmpty">
+                <p>还没有笔记</p>
+                <button class="primary-button" id="emptyNewNoteBtn" type="button">新建第一篇笔记</button>
+              </div>
+              <div class="note-editor-pane" id="noteEditorPane" hidden>
+                <div class="note-editor-head">
+                  <input id="noteTitleInput" class="note-title-input" type="text" maxlength="80" autocomplete="off" placeholder="笔记标题" aria-label="笔记标题" />
+                  <div class="note-editor-actions">
+                    <button class="ghost-button" id="addNoteImageBtn" type="button">
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path d="m21 15-5-5L5 21" />
+                      </svg>
+                      添加图片
+                    </button>
+                    <button class="danger-button" id="deleteNoteBtn" type="button">删除笔记</button>
+                  </div>
+                </div>
+                <input id="noteImageInput" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple />
+                <div
+                  class="note-editor"
+                  id="noteEditor"
+                  contenteditable="true"
+                  role="textbox"
+                  aria-multiline="true"
+                  aria-label="笔记正文"
+                  data-placeholder="在这里写笔记，也可以粘贴或拖入图片……"
+                ></div>
+                <div class="note-editor-meta" id="noteEditorMeta"></div>
+              </div>
+            </section>
+          </section>
+        </section>
+
         <section class="app-view sync-view" id="syncView" role="tabpanel" aria-labelledby="syncPageBtn">
           <section class="sync-page">
             <section class="panel sync-panel" aria-labelledby="syncTitle">
@@ -528,6 +584,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260709-2"></script>
+    <script src="app.js?v=20260806-2"></script>
   </body>
 </html>
