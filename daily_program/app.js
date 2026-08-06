@@ -539,7 +539,7 @@ function renderHoliday(holiday, plan, dates) {
   els.holidayDateLabel.textContent = `${formatFullDate(dates[0])} 至 ${formatFullDate(dates[dates.length - 1])}`;
   els.holidayReview.value = plan.review;
 
-  renderTasks(plan, dates, els.holidayDayGrid);
+  renderTasks(plan, dates, els.holidayDayGrid, plan, 7);
   renderIdeas(plan, els.holidayIdeaList);
 }
 
@@ -651,24 +651,24 @@ function renderQuickEntryControls(weekDates, holidayDates) {
   els.taskInput.placeholder = type === "holiday" ? "写下假期要推进的一件事" : "写下要推进的一件事";
 }
 
-function renderTasks(plan, dates, grid, inboxPlan = plan) {
+function renderTasks(plan, dates, grid, inboxPlan = plan, daysPerRow = 5) {
   grid.replaceChildren();
 
-  for (let rowStart = 0; rowStart < dates.length; rowStart += 5) {
-    const rowDates = dates.slice(rowStart, rowStart + 5);
+  for (let rowStart = 0; rowStart < dates.length; rowStart += daysPerRow) {
+    const rowDates = dates.slice(rowStart, rowStart + daysPerRow);
     const weekRow = createWeekRow();
     rowDates.forEach((date, offset) => {
       weekRow.cells.append(createDayColumn(plan, date, rowStart + offset));
     });
-    if (rowStart + rowDates.length >= dates.length && rowDates.length < 5) {
-      weekRow.cells.append(createPlanInbox(inboxPlan, dates, 5 - rowDates.length));
+    if (rowStart + rowDates.length >= dates.length && rowDates.length < daysPerRow) {
+      weekRow.cells.append(createPlanInbox(inboxPlan, dates, daysPerRow - rowDates.length));
     }
     grid.append(weekRow.row);
   }
 
-  if (dates.length % 5 === 0) {
+  if (dates.length % daysPerRow === 0) {
     const inboxRow = createWeekRow();
-    inboxRow.cells.append(createPlanInbox(inboxPlan, dates, 5));
+    inboxRow.cells.append(createPlanInbox(inboxPlan, dates, daysPerRow));
     grid.append(inboxRow.row);
   }
 }

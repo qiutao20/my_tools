@@ -596,9 +596,13 @@ select:focus {
 
 .week-row-cells {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--days-per-row, 5), minmax(0, 1fr));
   gap: 12px;
   align-items: stretch;
+}
+
+.holiday-day-grid {
+  --days-per-row: 7;
 }
 
 .time-marker {
