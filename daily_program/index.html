@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>周期计划</title>
-    <link rel="stylesheet" href="styles.css?v=20260806-2" />
+    <link rel="stylesheet" href="styles.css?v=20260806-3" />
   </head>
   <body>
     <div class="app-shell">
@@ -583,7 +583,33 @@
       </form>
     </dialog>
 
+    <dialog id="ideaDialog" class="task-dialog">
+      <form method="dialog" id="ideaDialogForm">
+        <div class="dialog-head">
+          <h2>编辑想法</h2>
+          <button class="icon-button subtle" id="closeIdeaDialog" type="button" aria-label="关闭" title="关闭">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <input id="dialogIdeaId" type="hidden" />
+        <label>
+          内容
+          <textarea id="dialogIdeaText" rows="5" maxlength="240" required></textarea>
+        </label>
+        <label>
+          截止
+          <input id="dialogIdeaDeadline" type="date" required />
+        </label>
+        <div class="dialog-actions">
+          <button class="danger-button" id="deleteDialogIdea" type="button">删除</button>
+          <button class="primary-button" value="default" type="submit">保存</button>
+        </div>
+      </form>
+    </dialog>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260806-2"></script>
+    <script src="app.js?v=20260806-3"></script>
   </body>
 </html>

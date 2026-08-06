@@ -49,6 +49,9 @@ let activeView = "all";
 let activePage = getInitialActivePage();
 let activeNoteId = state.notes[0]?.id || "";
 let dialogPlanType = "plan";
+let dialogPlanKey = "";
+let ideaDialogPlanType = "plan";
+let ideaDialogPlanKey = "";
 let toastTimer = 0;
 let githubWriteTimer = 0;
 let githubRequestInFlight = false;
@@ -117,6 +120,13 @@ const els = {
   dialogNotes: document.querySelector("#dialogNotes"),
   deleteTask: document.querySelector("#deleteTask"),
   closeDialog: document.querySelector("#closeDialog"),
+  ideaDialog: document.querySelector("#ideaDialog"),
+  ideaDialogForm: document.querySelector("#ideaDialogForm"),
+  dialogIdeaId: document.querySelector("#dialogIdeaId"),
+  dialogIdeaText: document.querySelector("#dialogIdeaText"),
+  dialogIdeaDeadline: document.querySelector("#dialogIdeaDeadline"),
+  deleteDialogIdea: document.querySelector("#deleteDialogIdea"),
+  closeIdeaDialog: document.querySelector("#closeIdeaDialog"),
   githubSaveConfigBtn: document.querySelector("#githubSaveConfigBtn"),
   githubPullBtn: document.querySelector("#githubPullBtn"),
   githubPushBtn: document.querySelector("#githubPushBtn"),
@@ -209,12 +219,14 @@ function bindEvents() {
     const text = els.ideaInput.value.trim();
     if (!text) return;
     const type = getQuickEntryType();
+    const now = new Date().toISOString();
     getIdeasByType(type).unshift({
       id: createId(),
       text,
       deadline: getInputDeadline(els.ideaDeadline),
       archived: false,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     });
     els.ideaInput.value = "";
     saveAndRender(type === "holiday" ? "假期想法已记录" : "想法已记录");
@@ -300,10 +312,16 @@ function bindEvents() {
 
   els.ideaList.addEventListener("click", (event) => {
     const archiveButton = event.target.closest("[data-toggle-idea]");
+    const editButton = event.target.closest("[data-edit-idea]");
     const deleteButton = event.target.closest("[data-delete-idea]");
 
     if (archiveButton) {
       toggleIdea(archiveButton.dataset.toggleIdea);
+      return;
+    }
+
+    if (editButton) {
+      openIdeaDialog(editButton.dataset.editIdea, "plan");
       return;
     }
 
@@ -325,10 +343,16 @@ function bindEvents() {
 
   els.holidayIdeaList.addEventListener("click", (event) => {
     const archiveButton = event.target.closest("[data-toggle-idea]");
+    const editButton = event.target.closest("[data-edit-idea]");
     const deleteButton = event.target.closest("[data-delete-idea]");
 
     if (archiveButton) {
       toggleIdea(archiveButton.dataset.toggleIdea, "holiday");
+      return;
+    }
+
+    if (editButton) {
+      openIdeaDialog(editButton.dataset.editIdea, "holiday");
       return;
     }
 
@@ -370,9 +394,14 @@ function bindEvents() {
   [els.aggregateOpenList, els.aggregateDoneList].forEach((list) => {
     list.addEventListener("click", (event) => {
       const toggle = event.target.closest("[data-aggregate-toggle]");
+      const edit = event.target.closest("[data-aggregate-edit]");
       const remove = event.target.closest("[data-aggregate-delete]");
       if (toggle) {
         toggleAggregateItem(toggle);
+        return;
+      }
+      if (edit) {
+        editAggregateItem(edit);
         return;
       }
       if (remove) deleteAggregateItem(remove);
@@ -522,17 +551,23 @@ function bindEvents() {
   });
 
   els.deleteTask.addEventListener("click", () => {
-    const id = els.dialogTaskId.value;
-    if (!id) return;
-    setTasksByType(dialogPlanType, getTasksByType(dialogPlanType).filter((task) => task.id !== id));
-    closeDialog();
-    saveAndRender("计划已删除");
+    deleteTaskFromDialog();
   });
 
   els.closeDialog.addEventListener("click", closeDialog);
 
   els.taskDialog.addEventListener("click", (event) => {
     if (event.target === els.taskDialog) closeDialog();
+  });
+
+  els.ideaDialogForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveDialogIdea();
+  });
+  els.deleteDialogIdea.addEventListener("click", deleteIdeaFromDialog);
+  els.closeIdeaDialog.addEventListener("click", closeIdeaDialog);
+  els.ideaDialog.addEventListener("click", (event) => {
+    if (event.target === els.ideaDialog) closeIdeaDialog();
   });
 }
 
@@ -930,13 +965,19 @@ function renderIdeas(plan, list) {
     text.textContent = idea.text;
     const time = document.createElement("span");
     time.className = "idea-time";
-    time.textContent = `${formatDeadlineLabel(idea.deadline)} · 记录 ${formatShortTime(idea.createdAt)}`;
+    const wasEdited = idea.updatedAt && idea.updatedAt !== idea.createdAt;
+    time.textContent = `${formatDeadlineLabel(idea.deadline)} · ${wasEdited ? "更新" : "记录"} ${formatShortTime(wasEdited ? idea.updatedAt : idea.createdAt)}`;
     body.append(text, time);
 
+    const actions = document.createElement("div");
+    actions.className = "idea-actions";
+    const edit = iconButton("edit-idea", "编辑想法", pencilIcon());
+    edit.dataset.editIdea = idea.id;
     const del = iconButton("delete-idea", "删除想法", trashIcon());
     del.dataset.deleteIdea = idea.id;
+    actions.append(edit, del);
 
-    item.append(toggle, body, del);
+    item.append(toggle, body, actions);
     list.append(item);
   });
 }
@@ -1231,14 +1272,24 @@ function createAggregateItem(item) {
   }
 
   body.append(title, meta);
+  const actions = document.createElement("div");
+  actions.className = "aggregate-actions";
+  const edit = iconButton("edit-idea aggregate-edit", item.kind === "task" ? "编辑计划" : "编辑想法", pencilIcon());
+  edit.dataset.aggregateEdit = "true";
+  edit.dataset.kind = item.kind;
+  edit.dataset.planType = item.planType;
+  edit.dataset.planKey = item.planKey;
+  edit.dataset.itemId = item.id;
+
   const remove = iconButton("delete-idea aggregate-delete", item.kind === "task" ? "删除计划" : "删除想法", trashIcon());
   remove.dataset.aggregateDelete = "true";
   remove.dataset.kind = item.kind;
   remove.dataset.planType = item.planType;
   remove.dataset.planKey = item.planKey;
   remove.dataset.itemId = item.id;
+  actions.append(edit, remove);
 
-  card.append(check, body, remove);
+  card.append(check, body, actions);
   return card;
 }
 
@@ -1301,7 +1352,7 @@ function appendPlanItems(items, context) {
       planType: context.planType,
       planKey: context.planKey,
       deadline: idea.deadline,
-      sortTime: idea.createdAt,
+      sortTime: idea.updatedAt || idea.createdAt,
     });
   });
 }
@@ -1396,6 +1447,7 @@ function toggleIdea(id, type = "plan") {
   const idea = getIdeasByType(type).find((item) => item.id === id);
   if (!idea) return;
   idea.archived = !idea.archived;
+  idea.updatedAt = new Date().toISOString();
   saveAndRender(idea.archived ? "想法已整理" : "想法已恢复");
 }
 
@@ -1415,7 +1467,19 @@ function toggleAggregateItem(button) {
   const idea = plan.ideas.find((item) => item.id === button.dataset.itemId);
   if (!idea) return;
   idea.archived = !idea.archived;
+  idea.updatedAt = new Date().toISOString();
   saveAndRender(idea.archived ? "想法已收纳" : "想法已恢复为待处理");
+}
+
+function editAggregateItem(button) {
+  const type = button.dataset.planType;
+  const key = button.dataset.planKey;
+  const id = button.dataset.itemId;
+  if (button.dataset.kind === "task") {
+    openTaskDialog(id, type, key);
+  } else {
+    openIdeaDialog(id, type, key);
+  }
 }
 
 function deleteAggregateItem(button) {
@@ -1563,9 +1627,15 @@ function focusFirstPeriodCell() {
   target.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
 }
 
-function openTaskDialog(id, type = "plan") {
+function getPlanForEditing(type, key = "") {
+  if (type === "holiday" && !key) return getActiveHolidayPlan();
+  return getPlanByReference(type, key);
+}
+
+function openTaskDialog(id, type = "plan", key = "") {
   dialogPlanType = type;
-  const task = findTask(id, type);
+  dialogPlanKey = key;
+  const task = getPlanForEditing(type, key)?.tasks.find((item) => item.id === id);
   if (!task) return;
   els.dialogTaskId.value = task.id;
   els.dialogTitle.value = task.title;
@@ -1578,7 +1648,7 @@ function openTaskDialog(id, type = "plan") {
 
 function saveDialogTask() {
   const id = els.dialogTaskId.value;
-  const task = findTask(id, dialogPlanType);
+  const task = getPlanForEditing(dialogPlanType, dialogPlanKey)?.tasks.find((item) => item.id === id);
   if (!task) return;
   task.title = els.dialogTitle.value.trim();
   task.deadline = getInputDeadline(els.dialogDeadline);
@@ -1589,8 +1659,57 @@ function saveDialogTask() {
   saveAndRender("计划已保存");
 }
 
+function deleteTaskFromDialog() {
+  const id = els.dialogTaskId.value;
+  const plan = getPlanForEditing(dialogPlanType, dialogPlanKey);
+  if (!id || !plan) return;
+  const tasks = plan.tasks.filter((task) => task.id !== id);
+  if (dialogPlanType === "plan") state.tasks = tasks;
+  else plan.tasks = tasks;
+  closeDialog();
+  saveAndRender("计划已删除");
+}
+
+function openIdeaDialog(id, type = "plan", key = "") {
+  ideaDialogPlanType = type;
+  ideaDialogPlanKey = key;
+  const idea = getPlanForEditing(type, key)?.ideas.find((item) => item.id === id);
+  if (!idea) return;
+  els.dialogIdeaId.value = idea.id;
+  els.dialogIdeaText.value = idea.text;
+  els.dialogIdeaDeadline.value = isDateKey(idea.deadline) ? idea.deadline : getBeijingDateKey();
+  els.ideaDialog.showModal();
+  els.dialogIdeaText.focus();
+}
+
+function saveDialogIdea() {
+  const id = els.dialogIdeaId.value;
+  const idea = getPlanForEditing(ideaDialogPlanType, ideaDialogPlanKey)?.ideas.find((item) => item.id === id);
+  if (!idea) return;
+  idea.text = els.dialogIdeaText.value.trim();
+  idea.deadline = getInputDeadline(els.dialogIdeaDeadline);
+  idea.updatedAt = new Date().toISOString();
+  closeIdeaDialog();
+  saveAndRender("想法已保存");
+}
+
+function deleteIdeaFromDialog() {
+  const id = els.dialogIdeaId.value;
+  const plan = getPlanForEditing(ideaDialogPlanType, ideaDialogPlanKey);
+  if (!id || !plan) return;
+  const ideas = plan.ideas.filter((idea) => idea.id !== id);
+  if (ideaDialogPlanType === "plan") state.ideas = ideas;
+  else plan.ideas = ideas;
+  closeIdeaDialog();
+  saveAndRender("想法已删除");
+}
+
 function closeDialog() {
   if (els.taskDialog.open) els.taskDialog.close();
+}
+
+function closeIdeaDialog() {
+  if (els.ideaDialog.open) els.ideaDialog.close();
 }
 
 function setView(view) {
@@ -2109,6 +2228,7 @@ function normalizeIdea(idea, fallbackDeadline = getBeijingDateKey()) {
   idea.deadline = isDateKey(idea.deadline) ? idea.deadline : fallbackDeadline;
   idea.archived = Boolean(idea.archived);
   if (typeof idea.createdAt !== "string") idea.createdAt = new Date().toISOString();
+  if (typeof idea.updatedAt !== "string") idea.updatedAt = idea.createdAt;
   return idea;
 }
 
