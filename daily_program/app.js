@@ -651,7 +651,7 @@ function renderPeriodSummary(plan, dates = getPeriodDates(plan)) {
   const weekCount = getPeriodWeekStarts(dates).length;
   els.periodRangeMeta.textContent = `${dates.length} 天 · ${weekCount} 行`;
   els.periodDateLabel.textContent = `${formatFullDate(dates[0])} 至 ${formatFullDate(dates[dates.length - 1])}`;
-  els.periodConfigStatus.textContent = `当前范围：${dates.length} 天，按自然周分成 ${weekCount} 行。每个格子适合写一句短计划。`;
+  els.periodConfigStatus.textContent = `当前范围：${dates.length} 天，按自然周分成 ${weekCount} 行。`;
 }
 
 function renderPeriodGrid(plan, dates) {
@@ -725,7 +725,6 @@ function createPeriodDayCell(plan, date, key) {
   note.className = "period-day-note";
   note.rows = 3;
   note.maxLength = 100;
-  note.placeholder = "短计划";
   note.setAttribute("aria-label", `${formatFullDate(date)}宏观计划`);
   note.dataset.periodDay = key;
   note.value = plan.dayNotes[key] || "";
