@@ -2128,3 +2128,46 @@ select:focus {
     flex: 1;
   }
 }
+
+/* Keep the planner wide until its tools are requested. */
+.app-shell.sidebar-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sidebar[hidden] {
+  display: none;
+}
+
+.sidebar-controls {
+  margin-bottom: 16px;
+}
+
+#toggleSidebar:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 3px;
+}
+
+@media (max-width: 860px) {
+  .main-content {
+    order: -1;
+  }
+
+  .app-shell:not(.sidebar-collapsed) .sidebar {
+    position: fixed;
+    top: 70px;
+    bottom: 0;
+    left: 0;
+    z-index: 20;
+    width: min(300px, 100%);
+    height: auto;
+    overflow: auto;
+    border-right: 1px solid var(--line);
+    box-shadow: var(--shadow);
+  }
+
+  .sidebar-controls {
+    position: relative;
+    z-index: 21;
+    margin-bottom: 12px;
+  }
+}

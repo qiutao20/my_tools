@@ -57,6 +57,10 @@ let githubWriteTimer = 0;
 let githubRequestInFlight = false;
 
 const els = {
+  appShell: document.querySelector(".app-shell"),
+  sidebar: document.querySelector("#plannerSidebar"),
+  toggleSidebar: document.querySelector("#toggleSidebar"),
+  toggleSidebarLabel: document.querySelector("#toggleSidebarLabel"),
   weekRange: document.querySelector("#weekRange"),
   activeDateLabel: document.querySelector("#activeDateLabel"),
   prevWeek: document.querySelector("#prevWeek"),
@@ -187,7 +191,21 @@ function initialize() {
   }
 }
 
+function setSidebarOpen(open) {
+  els.sidebar.hidden = !open;
+  els.appShell.classList.toggle("sidebar-collapsed", !open);
+  els.toggleSidebar.setAttribute("aria-expanded", String(open));
+  els.toggleSidebarLabel.textContent = open ? "收起工具栏" : "展开工具栏";
+}
+
 function bindEvents() {
+  els.toggleSidebar.addEventListener("click", () => setSidebarOpen(els.sidebar.hidden));
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !els.sidebar.hidden) {
+      setSidebarOpen(false);
+      els.toggleSidebar.focus();
+    }
+  });
   els.prevWeek.addEventListener("click", () => movePlanRange(-1));
   els.nextWeek.addEventListener("click", () => movePlanRange(1));
   els.currentWeek.addEventListener("click", () => {

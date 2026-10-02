@@ -4,11 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>周期计划</title>
-    <link rel="stylesheet" href="styles.css?v=20260806-3" />
+    <link rel="stylesheet" href="styles.css?v=20261002-1" />
   </head>
   <body>
-    <div class="app-shell">
-      <aside class="sidebar">
+    <div class="app-shell sidebar-collapsed">
+      <aside class="sidebar" id="plannerSidebar" hidden>
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -123,6 +123,12 @@
       </aside>
 
       <main class="main-content">
+        <div class="sidebar-controls">
+          <button class="ghost-button" id="toggleSidebar" type="button" aria-controls="plannerSidebar" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+            <span id="toggleSidebarLabel">展开工具栏</span>
+          </button>
+        </div>
         <header class="topbar">
           <div>
             <p class="eyebrow">计划台</p>
@@ -610,6 +616,6 @@
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260830-1"></script>
+    <script src="app.js?v=20261002-1"></script>
   </body>
 </html>
