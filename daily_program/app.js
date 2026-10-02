@@ -845,22 +845,29 @@ function createDayColumn(plan, date, dayIndex) {
 
   const slotList = document.createElement("div");
   slotList.className = "day-slot-list";
-  getDateSlotValues(date, plan, dayIndex).forEach((value, slotIndex) => {
-    const slotRow = document.createElement("label");
+  const values = getDateSlotValues(date, plan, dayIndex);
+  slotLabels.forEach((slotLabel, slotIndex) => {
+    const slotRow = document.createElement("div");
     slotRow.className = "day-slot-row";
-    slotRow.dataset.slotLabel = slotLabels[slotIndex];
+    slotRow.dataset.slotLabel = slotLabel;
 
-    const slot = document.createElement("textarea");
-    slot.className = "day-slot";
-    slot.rows = 3;
-    slot.maxLength = 180;
-    slot.setAttribute("aria-label", `${formatWeekday(date)}${slotLabels[slotIndex]}`);
-    slot.value = value;
-    slot.dataset.daySlot = String(dayIndex);
-    slot.dataset.dateKey = key;
-    slot.dataset.slotIndex = String(slotIndex);
-
-    slotRow.append(slot);
+    const halves = document.createElement("div");
+    halves.className = "day-slot-halves";
+    for (let half = 0; half < 2; half += 1) {
+      // The first three entries retain existing plans; the next three hold lower cells.
+      const valueIndex = slotIndex + half * slotLabels.length;
+      const slot = document.createElement("textarea");
+      slot.className = "day-slot";
+      slot.rows = 2;
+      slot.maxLength = 180;
+      slot.setAttribute("aria-label", `${formatWeekday(date)}${slotLabel}${half === 0 ? "上半格" : "下半格"}`);
+      slot.value = values[valueIndex];
+      slot.dataset.daySlot = String(dayIndex);
+      slot.dataset.dateKey = key;
+      slot.dataset.slotIndex = String(valueIndex);
+      halves.append(slot);
+    }
+    slotRow.append(halves);
     slotList.append(slotRow);
   });
 
@@ -1529,7 +1536,7 @@ function deleteIdea(id, type = "plan") {
 }
 
 function updateDaySlot(dayKey, slotIndex, value, type = "plan", dayIndex = -1) {
-  if (!isDateKey(dayKey) || slotIndex < 0 || slotIndex >= slotLabels.length) {
+  if (!isDateKey(dayKey) || slotIndex < 0 || slotIndex >= slotLabels.length * 2) {
     return;
   }
   const slots = getOrCreateDateSlots(dayKey);
@@ -1551,7 +1558,7 @@ function updatePeriodDayNote(key, value, cell) {
 }
 
 function updateLegacyPlanSlot(type, dayIndex, slotIndex, value) {
-  if (dayIndex < 0) return;
+  if (dayIndex < 0 || slotIndex >= slotLabels.length) return;
   const plan = getPlanByType(type);
   if (!plan.daySlots[dayIndex]) plan.daySlots[dayIndex] = ["", "", ""];
   plan.daySlots[dayIndex][slotIndex] = value;
@@ -1914,7 +1921,7 @@ function exportWeek() {
 
   dates.forEach((date, index) => {
     lines.push("", `### ${formatWeekday(date)} ${formatMonthDay(date)}`);
-    const slots = getDateSlotValues(date, plan, index).map((slot) => slot.trim()).filter(Boolean);
+    const slots = getDateSlotValues(date, plan, index).flatMap((slot, slotIndex, values) => slotIndex < slotLabels.length ? [slot, values[slotIndex + slotLabels.length]] : []).map((slot) => slot.trim()).filter(Boolean);
     if (slots.length === 0) {
       lines.push("- 暂无");
       return;
@@ -2008,7 +2015,7 @@ function exportHoliday() {
 
   dates.forEach((date, index) => {
     lines.push("", `### ${formatWeekday(date)} ${formatMonthDay(date)}`);
-    const slots = getDateSlotValues(date, plan, index).map((slot) => slot.trim()).filter(Boolean);
+    const slots = getDateSlotValues(date, plan, index).flatMap((slot, slotIndex, values) => slotIndex < slotLabels.length ? [slot, values[slotIndex + slotLabels.length]] : []).map((slot) => slot.trim()).filter(Boolean);
     if (slots.length === 0) {
       lines.push("- 暂无");
       return;
@@ -2764,7 +2771,7 @@ function mergeDateSlots(dateSlots, key, slots) {
   if (!isDateKey(key) || !Array.isArray(slots)) return;
   const normalized = normalizeSlotArray(slots);
   if (!normalized.some((slot) => slot.trim())) return;
-  const shared = dateSlots[key] || ["", "", ""];
+  const shared = dateSlots[key] || normalizeSlotArray([]);
   normalized.forEach((value, index) => {
     if (!shared[index].trim() && value.trim()) shared[index] = value;
   });
@@ -2773,7 +2780,7 @@ function mergeDateSlots(dateSlots, key, slots) {
 
 function normalizeSlotArray(slots) {
   const source = Array.isArray(slots) ? slots : [];
-  return Array.from({ length: slotLabels.length }, (_, index) => (
+  return Array.from({ length: slotLabels.length * 2 }, (_, index) => (
     typeof source[index] === "string" ? source[index] : ""
   ));
 }
