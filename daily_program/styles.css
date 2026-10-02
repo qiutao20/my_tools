@@ -2171,3 +2171,16 @@ select:focus {
     margin-bottom: 12px;
   }
 }
+
+/* Divide each morning / afternoon / evening planning cell in half. */
+.day-slot,
+.day-column.today .day-slot {
+  background-image: linear-gradient(
+    to bottom,
+    transparent calc(50% - 0.5px),
+    var(--line-strong) calc(50% - 0.5px),
+    var(--line-strong) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+  background-repeat: no-repeat;
+}
