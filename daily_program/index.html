@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>周期计划</title>
-    <link rel="stylesheet" href="styles.css?v=20261004-1" />
+    <link rel="stylesheet" href="styles.css?v=20261004-2" />
   </head>
   <body>
     <div class="app-shell sidebar-collapsed">
@@ -135,6 +135,12 @@
           <div><button class="ghost-button" id="syncRetry" type="button">重试 / 处理</button>
           <button class="ghost-button" id="syncResolve" type="button">同步设置</button></div>
         </div>
+        <section id="syncConflicts" class="sync-conflicts" hidden aria-labelledby="syncConflictsTitle">
+          <h3 id="syncConflictsTitle">处理同步冲突</h3>
+          <p>其他修改会自动合并。请选择冲突内容，未确认前保留本地和远端两份数据。</p>
+          <div id="syncConflictList"></div>
+          <button class="primary-button" id="syncApplyMerge" type="button">确认合并并继续同步</button>
+        </section>
         <header class="topbar">
           <div>
             <p class="eyebrow">计划台</p>
@@ -622,6 +628,7 @@
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20261004-1"></script>
+    <script src="sync-merge.js?v=20261004-1"></script>
+    <script src="app.js?v=20261004-2"></script>
   </body>
 </html>

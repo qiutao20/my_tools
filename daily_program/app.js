@@ -60,6 +60,8 @@ let githubPendingPush = false;
 let githubPendingPull = false;
 let githubRetryTimer = 0;
 let githubRetryAttempt = 0;
+let githubMergePending = null;
+let githubMergeChoices = {};
 let githubIssue = githubSync.issue || "";
 let githubIssueKind = githubSync.issueKind || "";
 
@@ -203,6 +205,7 @@ function initialize() {
   updateGithubStatus();
   activatePage(activePage);
   render();
+  restoreGithubMerge();
   resumeGithubSync();
 }
 
@@ -214,10 +217,11 @@ function setSidebarOpen(open) {
 }
 
 function bindEvents() {
-  els.syncIndicator.addEventListener("click", () => activatePage("sync"));
-  document.querySelector("#syncResolve").addEventListener("click", () => activatePage("sync"));
+  document.querySelector("#syncApplyMerge").addEventListener("click", applyGithubMergeChoices);
+  els.syncIndicator.addEventListener("click", openGithubSyncHelp);
+  document.querySelector("#syncResolve").addEventListener("click", openGithubSyncHelp);
   document.querySelector("#syncRetry").addEventListener("click", () => {
-    if (githubIssueKind === "conflict" || githubIssueKind === "auth") activatePage("sync");
+    if (githubIssueKind === "conflict" || githubIssueKind === "auth") openGithubSyncHelp();
     else resumeGithubSync(true);
   });
   els.toggleSidebar.addEventListener("click", () => setSidebarOpen(els.sidebar.hidden));
@@ -537,6 +541,9 @@ function bindEvents() {
     const confirmed = window.confirm("确认清除本浏览器保存的 GitHub 配置和 token？计划数据不会被删除。");
     if (!confirmed) return;
     window.clearTimeout(githubWriteTimer);
+    githubMergePending = null;
+    githubMergeChoices = {};
+    document.querySelector("#syncConflicts").hidden = true;
     githubSync = { ...defaultGithubSyncConfig };
     localStorage.removeItem(SYNC_CONFIG_KEY);
     populateGithubInputs();
@@ -2422,6 +2429,9 @@ function readGithubInputs() {
   };
   const nextTarget = JSON.stringify([githubSync.owner, githubSync.repo, githubSync.branch, githubSync.path]);
   if (previousTarget !== nextTarget) {
+    githubMergePending = null;
+    githubMergeChoices = {};
+    document.querySelector("#syncConflicts").hidden = true;
     githubSync.sha = "";
     githubSync.lastSyncedAt = "";
     clearGithubIssue();
@@ -2614,6 +2624,185 @@ async function githubWriteContent(content, sha) {
   return response.json();
 }
 
+function githubMergeStorageKey() {
+  return "daily-program.sync-merge.v1:" + JSON.stringify([githubSync.owner, githubSync.repo, githubSync.branch, githubSync.path]);
+}
+
+function readGithubMergeStorage() {
+  try { return JSON.parse(localStorage.getItem(githubMergeStorageKey()) || "{}"); }
+  catch { return {}; }
+}
+
+function storeGithubBaseline(value, sha) {
+  localStorage.setItem(githubMergeStorageKey(), JSON.stringify({ baseline: value, sha }));
+}
+
+function restoreGithubMerge() {
+  const stored = readGithubMergeStorage();
+  if (stored.pending) {
+    githubMergePending = stored.pending;
+    githubMergeChoices = stored.choices || {};
+    renderGithubMergeConflicts();
+  }
+}
+
+function openGithubSyncHelp() {
+  if (githubMergePending) {
+    renderGithubMergeConflicts();
+    document.querySelector("#syncConflicts").scrollIntoView({ behavior: "smooth", block: "start" });
+  } else activatePage("sync");
+}
+
+function computeGithubMerge(pending, choices = githubMergeChoices) {
+  const local = normalizeState(JSON.parse(JSON.stringify(state)));
+  if (!pending.base && !PlannerSyncMerge.equal(local, pending.remote)) {
+    const key = "[]";
+    const choice = choices[key];
+    if (choice && PlannerSyncMerge.equal(choice.local, local) && PlannerSyncMerge.equal(choice.remote, pending.remote)) {
+      return { value: choice.mode === "remote" ? pending.remote : choice.mode === "manual" ? choice.value : local, conflicts: [] };
+    }
+    return { value: local, conflicts: [{ key, path: [], local, remote: pending.remote }] };
+  }
+  return PlannerSyncMerge.merge(pending.base, local, pending.remote, choices);
+}
+
+function conflictDescription(item) {
+  const path = item.path;
+  if (!path.length) return "首次建立同步基准：请选择保留本地、远端，或手动合并整份 JSON";
+  if (path[0] === "dateSlots" && typeof path[2] === "number") {
+    const index = path[2];
+    return `${path[1]} · ${slotLabels[index % 3]} · ${index < 3 ? "上半格" : "下半格"}`;
+  }
+  const labels = { tasks: "计划", ideas: "想法", notes: "笔记", plans: "周期计划", holidays: "假期计划", periodPlan: "宏观计划", dateSlots: "每日安排", customHoliday: "假期设置", text: "内容", content: "正文", title: "标题", done: "完成状态", review: "复盘", focus: "焦点", deadline: "截止日期", priority: "优先级" };
+  return path.map(part => {
+    if (typeof part !== "object") return labels[part] || part;
+    const records = [...(state.tasks || []), ...(state.ideas || []), ...(state.notes || []), ...(githubMergePending?.remote.tasks || []), ...(githubMergePending?.remote.ideas || []), ...(githubMergePending?.remote.notes || [])];
+    const record = records.find(entry => entry.id === part.id);
+    return record?.title || record?.text || `记录 ${part.id}`;
+  }).join(" · ");
+}
+
+function conflictValueText(value) {
+  return value === undefined ? "（已删除）" : typeof value === "string" ? value : JSON.stringify(value, null, 2);
+}
+
+function renderGithubMergeConflicts() {
+  if (!githubMergePending) return;
+  const result = computeGithubMerge(githubMergePending);
+  const panel = document.querySelector("#syncConflicts");
+  const list = document.querySelector("#syncConflictList");
+  panel.hidden = false;
+  list.replaceChildren();
+  result.conflicts.forEach(item => {
+    const card = document.createElement("article");
+    card.className = "sync-conflict-card";
+    const heading = document.createElement("h4");
+    heading.textContent = conflictDescription(item);
+    card.append(heading);
+    for (const [label, value] of [["本地", item.local], ["远端", item.remote]]) {
+      const title = document.createElement("strong"); title.textContent = label;
+      const pre = document.createElement("pre"); pre.textContent = conflictValueText(value);
+      card.append(title, pre);
+    }
+    const editor = document.createElement("textarea");
+    editor.rows = 4;
+    editor.value = conflictValueText(item.local);
+    editor.hidden = true;
+    editor.setAttribute("aria-label", `${conflictDescription(item)}合并内容`);
+    const buttons = document.createElement("div");
+    const feedback = document.createElement("span");
+    for (const [mode, label] of [["local", "使用本地"], ["remote", "使用远端"], ["manual", "手动合并"]]) {
+      const button = document.createElement("button"); button.type = "button"; button.className = "ghost-button"; button.textContent = label;
+      button.addEventListener("click", () => {
+        if (mode === "manual") { editor.hidden = false; editor.focus(); }
+        githubMergeChoices[item.key] = { mode, local: item.local, remote: item.remote, value: item.local };
+        feedback.textContent = `已选择：${label}`;
+        persistGithubMergePending();
+      });
+      buttons.append(button);
+    }
+    editor.addEventListener("input", () => {
+      try {
+        const structured = (item.local !== undefined && typeof item.local !== "string") || (item.remote !== undefined && typeof item.remote !== "string");
+        const value = structured ? JSON.parse(editor.value) : editor.value;
+        if (structured) {
+          const sample = item.local === undefined ? item.remote : item.local;
+          if (value === null || typeof value !== typeof sample || Array.isArray(value) !== Array.isArray(sample)) throw new Error("类型不匹配");
+        }
+        githubMergeChoices[item.key] = { mode: "manual", local: item.local, remote: item.remote, value };
+        feedback.textContent = "已填写合并内容";
+        persistGithubMergePending();
+      } catch {
+        delete githubMergeChoices[item.key];
+        persistGithubMergePending();
+        feedback.textContent = "请填写与原数据类型一致的有效 JSON";
+      }
+    });
+    card.append(editor, buttons, feedback);
+    list.append(card);
+  });
+  if (!result.conflicts.length) {
+    const text = document.createElement("p"); text.textContent = "冲突已选择完毕，点击确认完成合并。"; list.append(text);
+  }
+  reportGithubIssue(`有 ${result.conflicts.length || "待确认"} 处同步冲突，点击顶部状态处理。未处理前保留两份内容。`);
+}
+
+function persistGithubMergePending() {
+  const stored = readGithubMergeStorage();
+  localStorage.setItem(githubMergeStorageKey(), JSON.stringify({ ...stored, pending: githubMergePending, choices: githubMergeChoices }));
+}
+
+function acceptGithubMergedState(value, remote, sha) {
+  state = normalizeState(JSON.parse(JSON.stringify(value)));
+  activePlanRange = normalizePlanRange(state.activePlanRange);
+  githubLocalRevision += 1;
+  githubSync.sha = sha;
+  githubSync.dirty = !PlannerSyncMerge.equal(state, remote);
+  githubMergePending = null;
+  githubMergeChoices = {};
+  storeGithubBaseline(remote, sha);
+  clearGithubIssue();
+  saveState({ github: false });
+  render();
+  document.querySelector("#syncConflicts").hidden = true;
+}
+
+function applyGithubMergeChoices() {
+  if (!githubMergePending) return;
+  const result = computeGithubMerge(githubMergePending);
+  if (result.conflicts.length) {
+    renderGithubMergeConflicts();
+    showToast("请处理剩余冲突；期间改变的内容需要重新确认");
+    return;
+  }
+  const pending = githubMergePending;
+  acceptGithubMergedState(result.value, pending.remote, pending.sha);
+  // Explicit confirmation authorizes uploading the resolved result.
+  pushToGithub({ auto: true });
+}
+
+function prepareGithubMerge(remote) {
+  const remoteState = normalizeState(JSON.parse(remote.text));
+  const stored = readGithubMergeStorage();
+  const pending = { base: stored.baseline || null, remote: remoteState, sha: remote.sha };
+  const result = computeGithubMerge(pending, {});
+  if (result.conflicts.length) {
+    githubMergePending = pending;
+    githubMergeChoices = {};
+    persistGithubMergePending();
+    renderGithubMergeConflicts();
+    return false;
+  }
+  if (!PlannerSyncMerge.equal(state, result.value)) acceptGithubMergedState(result.value, remoteState, remote.sha);
+  else {
+    githubSync.sha = remote.sha;
+    githubSync.dirty = !PlannerSyncMerge.equal(normalizeState(state), remoteState);
+    storeGithubBaseline(remoteState, remote.sha);
+    clearGithubIssue();
+  }
+  return true;
+}
+
 function clearGithubIssue() {
   githubIssue = "";
   githubIssueKind = "";
@@ -2645,8 +2834,8 @@ function reportGithubIssue(message, kind = "conflict", operation = "push") {
 function handleGithubFailure(error, operation) {
   const message = String(error.message || error);
   const auth = /GitHub (401|403)/.test(message);
-  const conflict = /GitHub (409|422)/.test(message);
-  const transient = error instanceof TypeError || /timeout|abort|GitHub (408|429|5\d\d)/i.test(message);
+  const conflict = /GitHub 422/.test(message);
+  const transient = error instanceof TypeError || /timeout|abort|GitHub (408|409|429|5\d\d)/i.test(message);
   reportGithubIssue(`${operation === "push" ? "推送" : "拉取"}失败：${message}${transient ? "。将自动重试，本地修改已保留。" : "。请打开同步设置处理，本地数据已保留。"}`, auth ? "auth" : conflict ? "conflict" : transient ? "retry" : "error", operation);
 }
 
@@ -2658,10 +2847,10 @@ function resumeGithubSync(force = false) {
 }
 
 async function pullFromGithub(options = {}) {
+  if (githubMergePending) { openGithubSyncHelp(); return; }
   if (githubRequestInFlight) { githubPendingPull = true; return; }
   if (!options.auto) readGithubInputs();
   if (!isGithubConfigured()) { updateGithubStatus("请先填写完整 GitHub 配置和 token。"); return; }
-  const revision = githubLocalRevision;
   setGithubBusy(true);
   try {
     const remote = await githubReadContent();
@@ -2670,53 +2859,33 @@ async function pullFromGithub(options = {}) {
       else reportGithubIssue("远端文件不存在，请在同步设置中推送当前数据创建文件。", "error");
       return;
     }
-    const remoteState = normalizeState(JSON.parse(remote.text));
-    const localJson = JSON.stringify(normalizeState(state));
-    const remoteJson = JSON.stringify(remoteState);
-    if (revision !== githubLocalRevision || (options.auto && githubSync.dirty && localJson !== remoteJson)) {
-      if (remote.sha === githubSync.sha) {
-        clearGithubIssue();
-        githubPendingPush = githubSync.autoPush;
-      } else reportGithubIssue("远端与本地都有修改，自动同步已暂停。请打开同步设置，选择拉取远端或推送本地；覆盖前会再次确认。");
-      return;
-    }
-    if (localJson !== remoteJson && options.askBeforeReplace !== false && !window.confirm("远端 JSON 将替换当前浏览器数据。本地未推送的修改会丢失。继续？")) return;
-    state = remoteState;
-    activePlanRange = normalizePlanRange(state.activePlanRange);
-    githubSync.sha = remote.sha;
+    if (!prepareGithubMerge(remote)) return;
     githubSync.lastSyncedAt = new Date().toISOString();
-    githubSync.dirty = false;
-    clearGithubIssue();
-    saveState({ github: false });
-    render();
-    updateGithubStatus("已拉取最新数据。");
-    if (!options.auto) showToast("已拉取远端数据");
-  } catch (error) {
-    handleGithubFailure(error, "pull");
-  } finally { setGithubBusy(false); }
+    saveGithubSyncConfig();
+    githubPendingPush = githubSync.dirty && githubSync.autoPush;
+    updateGithubStatus(githubSync.dirty ? "已合并远端，新修改等待推送。" : "已拉取最新数据。");
+    if (!options.auto) showToast("已检查并合并远端数据");
+  } catch (error) { handleGithubFailure(error, "pull"); }
+  finally { setGithubBusy(false); }
 }
 
 async function pushToGithub(options = {}) {
+  if (githubMergePending) { openGithubSyncHelp(); return; }
   if (githubRequestInFlight) { githubPendingPush = true; return; }
   if (!options.auto) readGithubInputs();
   if (!isGithubConfigured()) { updateGithubStatus("请先填写完整 GitHub 配置和 token。"); return; }
   setGithubBusy(true);
   try {
     const remote = await githubReadContent();
-    const content = JSON.stringify(normalizeState(state), null, 2);
+    if (remote && !prepareGithubMerge(remote)) return;
+    const snapshot = normalizeState(JSON.parse(JSON.stringify(state)));
+    const content = JSON.stringify(snapshot, null, 2);
     const revision = githubLocalRevision;
-    const identical = remote && JSON.stringify(normalizeState(JSON.parse(remote.text))) === JSON.stringify(normalizeState(state));
-    const changed = remote && (!githubSync.sha || remote.sha !== githubSync.sha);
-    if (!identical && changed) {
-      if (options.auto) {
-        reportGithubIssue("远端数据已变化，自动推送已暂停。请打开同步设置，选择拉取远端或推送本地；覆盖前会再次确认。");
-        return;
-      }
-      if (!window.confirm("远端 JSON 已被更新。继续推送会覆盖远端内容。建议先拉取确认。仍要推送？")) return;
-    }
+    const identical = remote && PlannerSyncMerge.equal(normalizeState(JSON.parse(remote.text)), snapshot);
     const result = identical ? null : await githubWriteContent(content, remote ? remote.sha : "");
     githubSync.sha = identical ? remote.sha : result.content?.sha || "";
     githubSync.lastSyncedAt = new Date().toISOString();
+    storeGithubBaseline(snapshot, githubSync.sha);
     githubSync.dirty = revision !== githubLocalRevision;
     clearGithubIssue();
     githubPendingPush = githubSync.dirty && githubSync.autoPush;
