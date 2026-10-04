@@ -55,8 +55,18 @@ let ideaDialogPlanKey = "";
 let toastTimer = 0;
 let githubWriteTimer = 0;
 let githubRequestInFlight = false;
+let githubLocalRevision = 0;
+let githubPendingPush = false;
+let githubPendingPull = false;
+let githubRetryTimer = 0;
+let githubRetryAttempt = 0;
+let githubIssue = githubSync.issue || "";
+let githubIssueKind = githubSync.issueKind || "";
 
 const els = {
+  syncIndicator: document.querySelector("#syncIndicator"),
+  syncNotice: document.querySelector("#syncNotice"),
+  syncNoticeText: document.querySelector("#syncNoticeText"),
   appShell: document.querySelector(".app-shell"),
   sidebar: document.querySelector("#plannerSidebar"),
   toggleSidebar: document.querySelector("#toggleSidebar"),
@@ -181,14 +191,19 @@ initialize();
 
 function initialize() {
   configureMobileQuickPanel();
+  window.addEventListener("online", resumeGithubSync);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) resumeGithubSync();
+  });
+  window.setInterval(() => {
+    if (!document.hidden) resumeGithubSync();
+  }, 180000);
   bindEvents();
   populateGithubInputs();
   updateGithubStatus();
   activatePage(activePage);
   render();
-  if (isGithubConfigured() && githubSync.autoPull) {
-    pullFromGithub({ auto: true, askBeforeReplace: false });
-  }
+  resumeGithubSync();
 }
 
 function setSidebarOpen(open) {
@@ -199,6 +214,12 @@ function setSidebarOpen(open) {
 }
 
 function bindEvents() {
+  els.syncIndicator.addEventListener("click", () => activatePage("sync"));
+  document.querySelector("#syncResolve").addEventListener("click", () => activatePage("sync"));
+  document.querySelector("#syncRetry").addEventListener("click", () => {
+    if (githubIssueKind === "conflict" || githubIssueKind === "auth") activatePage("sync");
+    else resumeGithubSync(true);
+  });
   els.toggleSidebar.addEventListener("click", () => setSidebarOpen(els.sidebar.hidden));
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !els.sidebar.hidden) {
@@ -519,6 +540,7 @@ function bindEvents() {
     githubSync = { ...defaultGithubSyncConfig };
     localStorage.removeItem(SYNC_CONFIG_KEY);
     populateGithubInputs();
+    clearGithubIssue();
     updateGithubStatus("已清除 GitHub 同步配置。");
   });
 
@@ -2386,6 +2408,8 @@ function populateGithubInputs() {
 }
 
 function readGithubInputs() {
+  const previousTarget = JSON.stringify([githubSync.owner, githubSync.repo, githubSync.branch, githubSync.path]);
+  const previousToken = githubSync.token;
   githubSync = {
     ...githubSync,
     owner: els.githubOwner.value.trim(),
@@ -2396,6 +2420,12 @@ function readGithubInputs() {
     autoPull: els.githubAutoPull.checked,
     autoPush: els.githubAutoPush.checked,
   };
+  const nextTarget = JSON.stringify([githubSync.owner, githubSync.repo, githubSync.branch, githubSync.path]);
+  if (previousTarget !== nextTarget) {
+    githubSync.sha = "";
+    githubSync.lastSyncedAt = "";
+    clearGithubIssue();
+  } else if (previousToken !== githubSync.token) clearGithubIssue();
   saveGithubSyncConfig();
   updateGithubStatus();
 }
@@ -2447,11 +2477,28 @@ function updateGithubStatus(message) {
   } else {
     lines.push("未配置 GitHub 同步。填写 private_data 的读取/写入 token 后即可拉取或推送。");
   }
+  if (githubIssue) lines.unshift(githubIssue);
   els.githubStatus.textContent = lines.join("\n");
+  els.syncIndicator.textContent = githubIssue ? "同步异常 · 查看" : githubRequestInFlight ? "同步中…" : !isGithubConfigured() ? "未配置同步" : githubSync.dirty ? "待同步" : githubSync.lastSyncedAt ? "已同步" : "尚未同步";
+  els.syncIndicator.classList.toggle("sync-error", Boolean(githubIssue));
+  els.syncNotice.hidden = !githubIssue;
+  els.syncNoticeText.textContent = githubIssue;
 }
 
 function setGithubBusy(isBusy) {
   githubRequestInFlight = isBusy;
+  updateGithubStatus();
+  if (!isBusy) {
+    const push = githubPendingPush;
+    const pull = githubPendingPull;
+    githubPendingPush = false;
+    githubPendingPull = false;
+    if ((push || pull) && githubIssueKind === "retry") {
+      window.clearTimeout(githubRetryTimer);
+      githubRetryTimer = window.setTimeout(() => resumeGithubSync(), 6000);
+    } else if (push && githubSync.dirty) scheduleGithubAutoPush();
+    else if (pull && !githubIssue) window.setTimeout(() => pullFromGithub({ auto: true, askBeforeReplace: false }), 0);
+  }
   [els.saveData, els.githubSaveConfigBtn, els.githubPullBtn, els.githubPushBtn, els.githubClearBtn].forEach((button) => {
     button.disabled = isBusy;
   });
@@ -2459,6 +2506,7 @@ function setGithubBusy(isBusy) {
 
 function markGithubDirty() {
   if (!githubSync) return;
+  githubLocalRevision += 1;
   githubSync.dirty = true;
   saveGithubSyncConfig();
   updateGithubStatus();
@@ -2467,7 +2515,8 @@ function markGithubDirty() {
 
 function scheduleGithubAutoPush() {
   window.clearTimeout(githubWriteTimer);
-  if (!githubSync.autoPush || !isGithubConfigured()) return;
+  if (!githubSync.autoPush || !isGithubConfigured() || githubIssue) return;
+  if (githubRequestInFlight) { githubPendingPush = true; return; }
   updateGithubStatus("已记录本地修改，将在 6 秒后自动推送。");
   githubWriteTimer = window.setTimeout(() => pushToGithub({ auto: true }), 6000);
 }
@@ -2523,7 +2572,7 @@ function base64ToUtf8(value) {
 }
 
 async function githubReadContent() {
-  const response = await fetch(githubContentApiUrl(true), { headers: githubHeaders() });
+  const response = await fetch(githubContentApiUrl(true), { headers: githubHeaders(), cache: "no-store", signal: AbortSignal.timeout(30000) });
   if (response.status === 404) return null;
   if (!response.ok) {
     throw new Error(`GitHub ${response.status}: ${await githubErrorMessage(response)}`);
@@ -2531,7 +2580,7 @@ async function githubReadContent() {
   const payload = await response.json();
   let encodedContent = payload.content || "";
   if (!encodedContent && payload.git_url) {
-    const blobResponse = await fetch(payload.git_url, { headers: githubHeaders() });
+    const blobResponse = await fetch(payload.git_url, { headers: githubHeaders(), signal: AbortSignal.timeout(30000) });
     if (!blobResponse.ok) {
       throw new Error(`GitHub ${blobResponse.status}: ${await githubErrorMessage(blobResponse)}`);
     }
@@ -2555,6 +2604,7 @@ async function githubWriteContent(content, sha) {
   if (sha) body.sha = sha;
   const response = await fetch(githubContentApiUrl(false), {
     method: "PUT",
+    signal: AbortSignal.timeout(30000),
     headers: { ...githubHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -2564,105 +2614,117 @@ async function githubWriteContent(content, sha) {
   return response.json();
 }
 
-async function pullFromGithub(options = {}) {
-  if (githubRequestInFlight) return;
-  if (!options.auto) readGithubInputs();
-  if (!isGithubConfigured()) {
-    updateGithubStatus("请先填写完整 GitHub 配置和 token。");
-    showToast("GitHub 配置不完整");
-    return;
+function clearGithubIssue() {
+  githubIssue = "";
+  githubIssueKind = "";
+  githubSync.issue = "";
+  githubSync.issueKind = "";
+  githubRetryAttempt = 0;
+  window.clearTimeout(githubRetryTimer);
+  saveGithubSyncConfig();
+}
+
+function reportGithubIssue(message, kind = "conflict", operation = "push") {
+  githubIssue = message;
+  githubIssueKind = kind;
+  githubSync.issue = message;
+  githubSync.issueKind = kind;
+  saveGithubSyncConfig();
+  updateGithubStatus();
+  if (kind === "retry") {
+    window.clearTimeout(githubRetryTimer);
+    const delay = Math.min(60000, 6000 * 2 ** Math.min(githubRetryAttempt++, 4));
+    githubRetryTimer = window.setTimeout(() => {
+      if (!isGithubConfigured() || (operation === "push" ? !githubSync.autoPush : !githubSync.autoPull)) return;
+      if (operation === "push") pushToGithub({ auto: true });
+      else pullFromGithub({ auto: true, askBeforeReplace: false });
+    }, delay);
   }
+}
+
+function handleGithubFailure(error, operation) {
+  const message = String(error.message || error);
+  const auth = /GitHub (401|403)/.test(message);
+  const conflict = /GitHub (409|422)/.test(message);
+  const transient = error instanceof TypeError || /timeout|abort|GitHub (408|429|5\d\d)/i.test(message);
+  reportGithubIssue(`${operation === "push" ? "推送" : "拉取"}失败：${message}${transient ? "。将自动重试，本地修改已保留。" : "。请打开同步设置处理，本地数据已保留。"}`, auth ? "auth" : conflict ? "conflict" : transient ? "retry" : "error", operation);
+}
+
+function resumeGithubSync(force = false) {
+  if (!isGithubConfigured() || (githubIssue && githubIssueKind !== "retry" && !force)) return;
+  window.clearTimeout(githubRetryTimer);
+  if (githubSync.dirty && githubSync.autoPush) pushToGithub({ auto: true });
+  else if (githubSync.autoPull) pullFromGithub({ auto: true, askBeforeReplace: false });
+}
+
+async function pullFromGithub(options = {}) {
+  if (githubRequestInFlight) { githubPendingPull = true; return; }
+  if (!options.auto) readGithubInputs();
+  if (!isGithubConfigured()) { updateGithubStatus("请先填写完整 GitHub 配置和 token。"); return; }
+  const revision = githubLocalRevision;
   setGithubBusy(true);
   try {
-    updateGithubStatus("正在拉取 private_data 中的 JSON...");
     const remote = await githubReadContent();
     if (!remote) {
-      updateGithubStatus("远端 JSON 文件不存在。可以先推送当前数据创建文件。");
-      if (!options.auto) showToast("远端文件不存在");
+      if (githubSync.dirty && githubSync.autoPush) githubPendingPush = true;
+      else reportGithubIssue("远端文件不存在，请在同步设置中推送当前数据创建文件。", "error");
       return;
     }
     const remoteState = normalizeState(JSON.parse(remote.text));
     const localJson = JSON.stringify(normalizeState(state));
     const remoteJson = JSON.stringify(remoteState);
-    if (options.auto && githubSync.dirty && localJson !== remoteJson) {
-      updateGithubStatus("远端有更新，但本地也有未推送修改。请手动拉取或推送处理。");
+    if (revision !== githubLocalRevision || (options.auto && githubSync.dirty && localJson !== remoteJson)) {
+      if (remote.sha === githubSync.sha) {
+        clearGithubIssue();
+        githubPendingPush = githubSync.autoPush;
+      } else reportGithubIssue("远端与本地都有修改，自动同步已暂停。请打开同步设置，选择拉取远端或推送本地；覆盖前会再次确认。");
       return;
     }
-    if (localJson !== remoteJson && options.askBeforeReplace !== false) {
-      const confirmed = window.confirm("远端 JSON 将替换当前浏览器数据。本地未推送的修改会丢失。继续？");
-      if (!confirmed) {
-        updateGithubStatus("已取消拉取。");
-        return;
-      }
-    }
+    if (localJson !== remoteJson && options.askBeforeReplace !== false && !window.confirm("远端 JSON 将替换当前浏览器数据。本地未推送的修改会丢失。继续？")) return;
     state = remoteState;
     activePlanRange = normalizePlanRange(state.activePlanRange);
     githubSync.sha = remote.sha;
     githubSync.lastSyncedAt = new Date().toISOString();
     githubSync.dirty = false;
-    saveGithubSyncConfig();
+    clearGithubIssue();
     saveState({ github: false });
     render();
-    updateGithubStatus("已从 private_data 拉取最新数据。");
+    updateGithubStatus("已拉取最新数据。");
     if (!options.auto) showToast("已拉取远端数据");
   } catch (error) {
-    console.error(error);
-    updateGithubStatus(error.message);
-    showToast("GitHub 拉取失败");
-  } finally {
-    setGithubBusy(false);
-  }
+    handleGithubFailure(error, "pull");
+  } finally { setGithubBusy(false); }
 }
 
 async function pushToGithub(options = {}) {
-  if (githubRequestInFlight) return;
+  if (githubRequestInFlight) { githubPendingPush = true; return; }
   if (!options.auto) readGithubInputs();
-  if (!isGithubConfigured()) {
-    updateGithubStatus("请先填写完整 GitHub 配置和 token。");
-    showToast("GitHub 配置不完整");
-    return;
-  }
+  if (!isGithubConfigured()) { updateGithubStatus("请先填写完整 GitHub 配置和 token。"); return; }
   setGithubBusy(true);
   try {
-    updateGithubStatus("正在读取 private_data 远端版本...");
     const remote = await githubReadContent();
     const content = JSON.stringify(normalizeState(state), null, 2);
-    const remoteChanged = remote && githubSync.sha && remote.sha !== githubSync.sha;
-    const firstPushWouldOverwrite = remote && !githubSync.sha && remote.text.trim() !== content.trim();
-    if (remoteChanged || firstPushWouldOverwrite) {
+    const revision = githubLocalRevision;
+    const identical = remote && JSON.stringify(normalizeState(JSON.parse(remote.text))) === JSON.stringify(normalizeState(state));
+    const changed = remote && (!githubSync.sha || remote.sha !== githubSync.sha);
+    if (!identical && changed) {
       if (options.auto) {
-        updateGithubStatus("远端 JSON 已变化，自动推送已暂停。请先手动拉取或确认覆盖。");
+        reportGithubIssue("远端数据已变化，自动推送已暂停。请打开同步设置，选择拉取远端或推送本地；覆盖前会再次确认。");
         return;
       }
-      const confirmed = window.confirm("远端 JSON 已被更新。继续推送会覆盖远端内容。建议先拉取确认。仍要推送？");
-      if (!confirmed) {
-        updateGithubStatus("已取消推送。");
-        return;
-      }
+      if (!window.confirm("远端 JSON 已被更新。继续推送会覆盖远端内容。建议先拉取确认。仍要推送？")) return;
     }
-    if (remote && remote.text.trim() === content.trim()) {
-      githubSync.sha = remote.sha;
-      githubSync.lastSyncedAt = new Date().toISOString();
-      githubSync.dirty = false;
-      saveGithubSyncConfig();
-      updateGithubStatus("远端已是最新，无需推送。");
-      if (!options.auto) showToast("远端已是最新");
-      return;
-    }
-    const result = await githubWriteContent(content, remote ? remote.sha : "");
-    githubSync.sha = result.content?.sha || "";
+    const result = identical ? null : await githubWriteContent(content, remote ? remote.sha : "");
+    githubSync.sha = identical ? remote.sha : result.content?.sha || "";
     githubSync.lastSyncedAt = new Date().toISOString();
-    githubSync.dirty = false;
-    saveGithubSyncConfig();
-    updateGithubStatus("已推送当前数据到 private_data。");
-    showToast(options.auto ? "已自动推送到 private_data" : "已推送到 private_data");
+    githubSync.dirty = revision !== githubLocalRevision;
+    clearGithubIssue();
+    githubPendingPush = githubSync.dirty && githubSync.autoPush;
+    updateGithubStatus(githubSync.dirty ? "已上传上一版，新修改等待推送。" : "已同步最新数据。");
+    if (!options.auto) showToast("已同步到远端");
   } catch (error) {
-    console.error(error);
-    updateGithubStatus(error.message);
-    showToast("GitHub 推送失败");
-  } finally {
-    setGithubBusy(false);
-  }
+    handleGithubFailure(error, "push");
+  } finally { setGithubBusy(false); }
 }
 
 function createRegularPlan(dayCount) {
