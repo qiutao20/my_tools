@@ -2184,17 +2184,17 @@ select:focus {
 }
 
 .day-slot-halves .day-slot {
-  flex: 1 0 auto;
+  flex: none;
   width: 100%;
   min-width: 0;
   min-height: 48px;
-  height: 48px;
-  resize: vertical;
+  height: 64px;
+  resize: none;
   border: 0;
   border-radius: 0;
 }
 
-.day-slot-halves .day-slot + .day-slot {
+.day-slot-halves .day-slot-cell + .day-slot-cell {
   border-top: 1px solid var(--line-strong);
 }
 
@@ -2221,3 +2221,45 @@ select:focus {
 .sync-conflict-card > div { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
 .sync-conflict-card textarea { width: 100%; }
 .sync-conflict-card textarea[hidden] { display: none; }
+
+/* Each input owns its height. Other days and halves never stretch to fill it. */
+.week-row { display: block; }
+.week-row-cells { align-items: start; }
+.time-marker { display: none; }
+.day-column { min-width: 0; min-height: 0; align-self: start; }
+.day-slot-list { flex: none; }
+.day-slot-row { flex: none; min-height: 0; align-items: start; grid-template-columns: 24px minmax(0, 1fr); }
+.day-slot-row::before {
+  content: attr(data-slot-label);
+  display: grid;
+  place-items: center;
+  padding-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.day-slot-halves { display: block; min-height: 0; align-self: start; }
+.day-slot-cell { min-width: 0; }
+.day-slot-cell .day-slot { display: block; overflow: auto; }
+.slot-resize-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface-soft);
+  color: var(--muted);
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+.slot-resize-handle::after { content: ""; width: 24px; height: 4px; border-top: 1px solid currentColor; border-bottom: 1px solid currentColor; opacity: 0.55; }
+.slot-resize-handle:hover, .slot-resize-handle.resizing { background: #e8f3ed; color: var(--green); }
+.slot-resize-handle:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+@media (max-width: 860px) {
+  .day-slot-row::before { border: 0; background: transparent; }
+  .slot-resize-handle { height: 28px; }
+}

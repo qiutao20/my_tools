@@ -894,7 +894,20 @@ function createDayColumn(plan, date, dayIndex) {
       slot.dataset.daySlot = String(dayIndex);
       slot.dataset.dateKey = key;
       slot.dataset.slotIndex = String(valueIndex);
-      halves.append(slot);
+      const cell = document.createElement("div");
+      cell.className = "day-slot-cell";
+      const handle = document.createElement("button");
+      handle.type = "button";
+      handle.className = "slot-resize-handle";
+      handle.setAttribute("role", "slider");
+      handle.setAttribute("aria-label", `调整${slot.getAttribute("aria-label")}高度`);
+      handle.setAttribute("aria-orientation", "vertical");
+      handle.setAttribute("aria-valuemin", String(PlannerSlotResize.MIN_HEIGHT));
+      handle.setAttribute("aria-valuemax", String(PlannerSlotResize.MAX_HEIGHT));
+      handle.title = "上下拖动调整高度；双击恢复默认；方向键微调";
+      cell.append(slot, handle);
+      PlannerSlotResize.applyHeight(slot);
+      halves.append(cell);
     }
     slotRow.append(halves);
     slotList.append(slotRow);
